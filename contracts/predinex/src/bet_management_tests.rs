@@ -498,6 +498,32 @@ fn e7_frozen_pool_rejected() {
     );
 }
 
+/// E7b: A disputed pool cannot be extended.
+///
+/// A pool can only be disputed after it is settled, so it is already out of the
+/// `Open` state — extension must reject it with `PoolNotOpen`.
+#[test]
+fn e7b_disputed_pool_rejected() {
+    let t = setup_bm();
+    let (pool_id, creator) = make_pool_bm(&t);
+
+    let user = Address::generate(&t.env);
+    mint(&t.env, &t.token, &user, 1_000);
+    t.client
+        .place_bet(&user, &pool_id, &0u32, &100i128, &None::<Address>);
+
+    // Settle, then dispute via the freeze admin (creator is set as admin here).
+    t.env.ledger().with_mut(|li| li.timestamp = 7_200);
+    t.client.settle_pool(&creator, &pool_id, &0u32);
+    t.client.set_freeze_admin(&t.admin, &creator);
+    t.client.dispute_pool(&creator, &pool_id);
+
+    assert_eq!(
+        t.client.try_extend_pool_duration(&creator, &pool_id, &600u64),
+        Err(Ok(ContractError::PoolNotOpen))
+    );
+}
+
 /// E8: `pool_duration_extended` event carries the new expiry.
 #[test]
 fn e8_duration_extended_event_payload() {
