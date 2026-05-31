@@ -306,6 +306,51 @@ creator: Address
 
 ---
 
+### `bet_cancelled`
+
+Emitted when a bettor cancels part (or all) of their position on an outcome
+while the pool is still open. The cancelled amount is refunded to the caller and
+removed from the outcome total; `participant_count` is left unchanged.
+
+**Trigger:** `PredinexContract::cancel_bet`
+
+**Topics tuple:**
+```
+(Symbol("bet_cancelled"), Symbol("v1"), pool_id: u32, user: Address)
+```
+
+**Data:** (`BetCancelledEvent`)
+
+| Field     | Type      | Values           | Description                                  |
+|-----------|-----------|------------------|----------------------------------------------|
+| `user`    | `Address` | —                | The bettor that cancelled (mirrors topic 3)  |
+| `pool_id` | `u32`     | —                | The pool the bet was cancelled in            |
+| `outcome` | `u32`     | `0` = A, `1` = B | Which outcome the cancelled stake was on     |
+| `amount`  | `i128`    | positive integer | Amount refunded and removed from the position |
+
+---
+
+### `pool_duration_extended`
+
+Emitted when the pool creator extends an open pool's duration before it expires.
+The new expiry never exceeds `created_at + MAX_POOL_DURATION_SECS` (1,000,000 s).
+
+**Trigger:** `PredinexContract::extend_pool_duration`
+
+**Topics tuple:**
+```
+(Symbol("pool_duration_extended"), Symbol("v1"), pool_id: u32)
+```
+
+**Data:** (`PoolDurationExtendedEvent`)
+
+| Field        | Type      | Description                                  |
+|--------------|-----------|----------------------------------------------|
+| `creator`    | `Address` | The pool creator that extended the duration  |
+| `new_expiry` | `u64`     | The pool's new expiry timestamp (unix secs)  |
+
+---
+
 ### 7. `void_pool`
 
 Emitted when the creator voids an open pool, opening the way for refund claims.
@@ -505,6 +550,7 @@ const events = await server.getEvents({
 
 | Version | Change                                                                                  |
 |---------|-----------------------------------------------------------------------------------------|
+| v1      | Added `bet_cancelled` (partial bet cancellation) and `pool_duration_extended` events.   |
 | v1      | Schema version marker added at topic position 1 on every event (issue #175).            |
 | v0.1    | Initial event schema documented (`create_pool`, `place_bet`, `settle_pool`, `claim_winnings`). |
 

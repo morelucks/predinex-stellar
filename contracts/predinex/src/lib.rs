@@ -5,6 +5,7 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, token, Address, Env, String, Symbol, Vec,
 };
 
+mod bet_management_tests;
 mod fuzz_tests;
 mod multi_user_tests;
 mod pause_tests;
@@ -650,6 +651,40 @@ pub struct ReferralBetEvent {
 pub struct ClaimAllEntry {
     pub pool_id: u32,
     pub amount: i128,
+}
+
+/// Event payload emitted by `cancel_bet` (partial/full bet cancellation).
+///
+/// Fields
+/// ------
+/// - `user`    – address that cancelled part (or all) of its position
+/// - `pool_id` – the pool the bet was cancelled in
+/// - `outcome` – which outcome the cancelled stake was on
+/// - `amount`  – the refunded amount removed from the user's position
+///
+/// `user` and `pool_id` are also carried as event topics so indexers can filter
+/// on them; they are duplicated here so a single payload fully describes the
+/// cancellation without a follow-up read.
+#[derive(Clone)]
+#[contracttype]
+pub struct BetCancelledEvent {
+    pub user: Address,
+    pub pool_id: u32,
+    pub outcome: u32,
+    pub amount: i128,
+}
+
+/// Event payload emitted by `extend_pool_duration`.
+///
+/// Fields
+/// ------
+/// - `creator`    – pool creator that extended the duration
+/// - `new_expiry` – the pool's new expiry timestamp after the extension
+#[derive(Clone)]
+#[contracttype]
+pub struct PoolDurationExtendedEvent {
+    pub creator: Address,
+    pub new_expiry: u64,
 }
 
 #[contract]
@@ -1888,6 +1923,216 @@ impl PredinexContract {
         Ok(())
     }
 
+    /// Cancel part (or all) of a previously placed bet before the pool resolves.
+    ///
+    /// Lets a bettor reduce their exposure on a given outcome while the market is
+    /// still live. The cancelled `amount` is transferred straight back to the
+    /// caller and removed from the relevant outcome total and the user's position.
+    ///
+    /// # Conditions
+    /// * Only the betting user may cancel their own position (`user.require_auth`).
+    /// * Pool must exist and be `Open` (not settled, voided, cancelled, frozen,
+    ///   or disputed) and not yet expired.
+    /// * `amount` must be positive and at most the user's current stake on
+    ///   `outcome`.
+    /// * After the cancellation, any non-zero remaining stake on `outcome` must
+    ///   still satisfy the pool's configured min/max bet limits. A full
+    ///   cancellation (remaining == 0) is always allowed.
+    ///
+    /// # Post-conditions
+    /// * `amount` is refunded to the caller.
+    /// * The outcome total and the pool's `total_a`/`total_b` are reduced by
+    ///   `amount`; `participant_count` is left unchanged even on a full
+    ///   cancellation (the participant slot is retained).
+    /// * A `bet_cancelled` event is emitted with `(user, pool_id, outcome, amount)`.
+    ///
+    /// # Errors
+    /// * `PoolNotFound` — pool ID does not exist.
+    /// * `PoolNotOpen` — pool is not in the `Open` state.
+    /// * `PoolExpired` — pool expiry has already passed.
+    /// * `InvalidOutcome` — `outcome` index is out of range.
+    /// * `InvalidBetAmount` — `amount` is non-positive or exceeds the user's
+    ///   stake on `outcome`.
+    /// * `NoBetFound` — caller has no position in this pool.
+    /// * `BetBelowMinBet` / `BetAboveMaxBet` — remaining stake would violate the
+    ///   configured per-pool bet limits.
+    pub fn cancel_bet(
+        env: Env,
+        user: Address,
+        pool_id: u32,
+        outcome: u32,
+        amount: i128,
+    ) -> Result<i128, ContractError> {
+        user.require_auth();
+        Self::require_not_paused(&env)?;
+
+        if amount <= 0 {
+            return Err(ContractError::InvalidBetAmount);
+        }
+
+        let mut pool = env
+            .storage()
+            .persistent()
+            .get::<_, Pool>(&DataKey::Pool(pool_id))
+            .ok_or(ContractError::PoolNotFound)?;
+
+        // Cancellation is only allowed while the market is live.
+        if pool.status != PoolStatus::Open {
+            return Err(ContractError::PoolNotOpen);
+        }
+        if env.ledger().timestamp() >= pool.expiry {
+            return Err(ContractError::PoolExpired);
+        }
+
+        let outcomes = Self::read_outcomes(&env, pool_id, &pool);
+        if outcome >= outcomes.len() {
+            return Err(ContractError::InvalidOutcome);
+        }
+
+        let mut user_bet = env
+            .storage()
+            .persistent()
+            .get::<_, UserBet>(&DataKey::UserBet(pool_id, user.clone()))
+            .ok_or(ContractError::NoBetFound)?;
+
+        let mut outcome_bets = Self::read_user_outcome_bets(&env, pool_id, user.clone(), &user_bet);
+        while outcome_bets.len() < outcomes.len() {
+            outcome_bets.push_back(0);
+        }
+        let user_outcome_amount = outcome_bets.get(outcome).unwrap();
+
+        // Cannot cancel more than the user staked on this outcome.
+        if amount > user_outcome_amount {
+            return Err(ContractError::InvalidBetAmount);
+        }
+
+        let remaining = user_outcome_amount
+            .checked_sub(amount)
+            .ok_or(ContractError::InvalidBetAmount)?;
+
+        // Re-check per-pool bet limits against the remaining stake. A full
+        // cancellation (remaining == 0) closes the position and is always allowed.
+        if remaining > 0 {
+            let min_bet: i128 = env
+                .storage()
+                .persistent()
+                .get::<_, i128>(&DataKey::PoolMinBet(pool_id))
+                .unwrap_or(DEFAULT_MIN_BET_STROOPS);
+            let max_bet: i128 = env
+                .storage()
+                .persistent()
+                .get::<_, i128>(&DataKey::PoolMaxBet(pool_id))
+                .unwrap_or(DEFAULT_MAX_BET_STROOPS);
+            if min_bet > 0 && remaining < min_bet {
+                return Err(ContractError::BetBelowMinBet);
+            }
+            if max_bet > 0 && remaining > max_bet {
+                return Err(ContractError::BetAboveMaxBet);
+            }
+        }
+
+        // Reduce the relevant outcome total.
+        let mut totals = Self::read_outcome_totals(&env, pool_id, &pool);
+        let current_outcome_total = totals.get(outcome).unwrap();
+        totals.set(
+            outcome,
+            current_outcome_total
+                .checked_sub(amount)
+                .ok_or(ContractError::InvalidBetAmount)?,
+        );
+
+        // Mirror `place_bet`: outcome 0 maps to total_a, every other outcome to
+        // total_b, so cancellation exactly undoes what the bet added.
+        if outcome == 0 {
+            pool.total_a = pool
+                .total_a
+                .checked_sub(amount)
+                .ok_or(ContractError::InvalidBetAmount)?;
+            user_bet.amount_a = user_bet
+                .amount_a
+                .checked_sub(amount)
+                .ok_or(ContractError::InvalidBetAmount)?;
+        } else {
+            pool.total_b = pool
+                .total_b
+                .checked_sub(amount)
+                .ok_or(ContractError::InvalidBetAmount)?;
+            user_bet.amount_b = user_bet
+                .amount_b
+                .checked_sub(amount)
+                .ok_or(ContractError::InvalidBetAmount)?;
+        }
+        user_bet.total_bet = user_bet
+            .total_bet
+            .checked_sub(amount)
+            .ok_or(ContractError::InvalidBetAmount)?;
+        outcome_bets.set(outcome, remaining);
+
+        // Refund the cancelled stake to the user.
+        let token_address = env
+            .storage()
+            .persistent()
+            .get::<_, Address>(&DataKey::Token)
+            .ok_or(ContractError::NotInitialized)?;
+        let token_client = token::Client::new(&env, &token_address);
+        token_client.transfer(&env.current_contract_address(), &user, &amount);
+
+        // Persist pool + outcome totals. `participant_count` is intentionally
+        // left untouched, even when the user's position drops to zero.
+        env.storage()
+            .persistent()
+            .set(&DataKey::Pool(pool_id), &pool);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Pool(pool_id),
+            POOL_BUMP_THRESHOLD,
+            POOL_BUMP_TARGET,
+        );
+        env.storage()
+            .persistent()
+            .set(&DataKey::PoolOutcomeTotals(pool_id), &totals);
+        env.storage().persistent().extend_ttl(
+            &DataKey::PoolOutcomeTotals(pool_id),
+            POOL_BUMP_THRESHOLD,
+            POOL_BUMP_TARGET,
+        );
+
+        // Persist the user's reduced position.
+        env.storage()
+            .persistent()
+            .set(&DataKey::UserBet(pool_id, user.clone()), &user_bet);
+        env.storage().persistent().set(
+            &DataKey::UserOutcomeBets(pool_id, user.clone()),
+            &outcome_bets,
+        );
+        env.storage().persistent().extend_ttl(
+            &DataKey::UserBet(pool_id, user.clone()),
+            POOL_BUMP_THRESHOLD,
+            POOL_BUMP_TARGET,
+        );
+        env.storage().persistent().extend_ttl(
+            &DataKey::UserOutcomeBets(pool_id, user.clone()),
+            POOL_BUMP_THRESHOLD,
+            POOL_BUMP_TARGET,
+        );
+
+        env.events().publish(
+            (
+                Symbol::new(&env, "bet_cancelled"),
+                event_version(&env),
+                pool_id,
+                user.clone(),
+            ),
+            BetCancelledEvent {
+                user,
+                pool_id,
+                outcome,
+                amount,
+            },
+        );
+
+        Ok(amount)
+    }
+
     /// #160 — Cancel a pool before it is settled.
     ///
     /// Only the pool creator may call this, and only while both outcome totals
@@ -1933,6 +2178,108 @@ impl PredinexContract {
         );
 
         Ok(())
+    }
+
+    /// Extend an open pool's duration before it expires.
+    ///
+    /// Gives a market more time to resolve without having to settle/void and
+    /// recreate it. The expiry is pushed out by `additional_seconds`, subject to
+    /// a hard cap of `MAX_POOL_DURATION_SECS` total lifetime measured from the
+    /// pool's `created_at` timestamp.
+    ///
+    /// # Conditions
+    /// * Only the pool creator may extend (`creator.require_auth`).
+    /// * Pool must exist and be `Open` (extension is rejected for settled,
+    ///   voided, cancelled, frozen, or disputed pools).
+    /// * Pool must not have expired yet.
+    /// * `additional_seconds` must be positive — duration can only be increased.
+    /// * The resulting expiry must not exceed `created_at + MAX_POOL_DURATION_SECS`.
+    ///
+    /// # Post-conditions
+    /// * `pool.expiry` is increased by `additional_seconds`.
+    /// * A `pool_duration_extended` event is emitted carrying the new expiry.
+    ///
+    /// Returns the pool's new expiry timestamp.
+    ///
+    /// # Errors
+    /// * `PoolNotFound` — pool ID does not exist.
+    /// * `Unauthorized` — caller is not the pool creator.
+    /// * `PoolNotOpen` — pool is not in the `Open` state (covers frozen/disputed).
+    /// * `PoolExpired` — pool expiry has already passed.
+    /// * `DurationTooShort` — `additional_seconds` is zero.
+    /// * `DurationTooLong` — extension would exceed `MAX_POOL_DURATION_SECS`.
+    /// * `ExpiryOverflow` — expiry arithmetic overflowed.
+    pub fn extend_pool_duration(
+        env: Env,
+        creator: Address,
+        pool_id: u32,
+        additional_seconds: u64,
+    ) -> Result<u64, ContractError> {
+        creator.require_auth();
+        Self::require_not_paused(&env)?;
+
+        let mut pool = env
+            .storage()
+            .persistent()
+            .get::<_, Pool>(&DataKey::Pool(pool_id))
+            .ok_or(ContractError::PoolNotFound)?;
+
+        if creator != pool.creator {
+            return Err(ContractError::Unauthorized);
+        }
+
+        // Only open pools can be extended — frozen/disputed/settled/voided/
+        // cancelled all reject here.
+        if pool.status != PoolStatus::Open {
+            return Err(ContractError::PoolNotOpen);
+        }
+
+        if env.ledger().timestamp() >= pool.expiry {
+            return Err(ContractError::PoolExpired);
+        }
+
+        // Duration can only be increased.
+        if additional_seconds == 0 {
+            return Err(ContractError::DurationTooShort);
+        }
+
+        let new_expiry = pool
+            .expiry
+            .checked_add(additional_seconds)
+            .ok_or(ContractError::ExpiryOverflow)?;
+
+        // Enforce the maximum total lifetime measured from creation.
+        let max_expiry = pool
+            .created_at
+            .checked_add(MAX_POOL_DURATION_SECS)
+            .ok_or(ContractError::ExpiryOverflow)?;
+        if new_expiry > max_expiry {
+            return Err(ContractError::DurationTooLong);
+        }
+
+        pool.expiry = new_expiry;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Pool(pool_id), &pool);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Pool(pool_id),
+            POOL_BUMP_THRESHOLD,
+            POOL_BUMP_TARGET,
+        );
+
+        env.events().publish(
+            (
+                Symbol::new(&env, "pool_duration_extended"),
+                event_version(&env),
+                pool_id,
+            ),
+            PoolDurationExtendedEvent {
+                creator,
+                new_expiry,
+            },
+        );
+
+        Ok(new_expiry)
     }
 
     /// Assign a delegated settler for a pool. Only the pool creator can call this.
