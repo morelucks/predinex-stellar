@@ -124,6 +124,9 @@ pub enum DataKey {
     TreasuryWithdrawalWindowSecs,
     /// #363 — Current treasury withdrawal rate-limit usage state.
     TreasuryWithdrawalState,
+    /// Contract-wide cumulative betting volume across all pools, incremented by
+    /// the bet amount on every `place_bet`. Read via `get_total_contract_volume`.
+    TotalContractVolume,
 }
 
 // #189 — TTL bump policy for persistent storage entries.
@@ -304,6 +307,12 @@ pub struct Pool {
     pub expiry: u64,
     /// Current operational status of the pool. Defaults to `Open`.
     pub status: PoolStatus,
+    /// Cumulative betting volume routed through this pool, incremented by the
+    /// bet amount on every `place_bet`. Unlike `total_a`/`total_b` (which an
+    /// indexer could net out by outcome), this is a monotonically increasing
+    /// lifetime figure that persists unchanged through settlement and claims —
+    /// an on-chain source for analytics displays without an off-chain indexer.
+    pub cumulative_volume: i128,
 }
 
 #[derive(Clone)]
@@ -1355,6 +1364,7 @@ impl PredinexContract {
             created_at,
             expiry,
             status,
+            cumulative_volume: 0,
         };
 
         let mut totals = Vec::new(env);
@@ -1779,6 +1789,24 @@ impl PredinexContract {
                 .checked_add(amount)
                 .ok_or(ContractError::PoolTotalOverflow)?;
         }
+
+        // Track cumulative betting volume for on-chain analytics. This figure
+        // only ever grows and is never reset by settlement or claims, so it
+        // diverges from total_a/total_b once winners withdraw.
+        pool.cumulative_volume = pool
+            .cumulative_volume
+            .checked_add(amount)
+            .ok_or(ContractError::PoolTotalOverflow)?;
+        let total_contract_volume: i128 = env
+            .storage()
+            .persistent()
+            .get::<_, i128>(&DataKey::TotalContractVolume)
+            .unwrap_or(0)
+            .checked_add(amount)
+            .ok_or(ContractError::PoolTotalOverflow)?;
+        env.storage()
+            .persistent()
+            .set(&DataKey::TotalContractVolume, &total_contract_volume);
 
         let mut user_bet = env
             .storage()
@@ -4020,6 +4048,29 @@ impl PredinexContract {
             .persistent()
             .get::<_, Pool>(&DataKey::Pool(pool_id))
             .map(|p| p.participant_count)
+            .unwrap_or(0)
+    }
+
+    /// Return the cumulative betting volume for a single pool.
+    ///
+    /// This is the lifetime sum of every `place_bet` amount on the pool and is
+    /// not reduced by settlement or claims. Returns 0 for unknown pools.
+    pub fn get_pool_volume(env: Env, pool_id: u32) -> i128 {
+        env.storage()
+            .persistent()
+            .get::<_, Pool>(&DataKey::Pool(pool_id))
+            .map(|p| p.cumulative_volume)
+            .unwrap_or(0)
+    }
+
+    /// Return the contract-wide cumulative betting volume across all pools.
+    ///
+    /// Incremented by every `place_bet` and never decremented, providing an
+    /// on-chain total-volume figure for frontends without an off-chain indexer.
+    pub fn get_total_contract_volume(env: Env) -> i128 {
+        env.storage()
+            .persistent()
+            .get::<_, i128>(&DataKey::TotalContractVolume)
             .unwrap_or(0)
     }
 }

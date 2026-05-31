@@ -2170,6 +2170,98 @@ fn test_set_creation_fee_exemption_unauthorized_rejected() {
     client.set_creation_fee_exemption(&attacker, &account, &true);
 }
 
+// ── Cumulative volume tracking ────────────────────────────────────────────────
+
+/// Per-pool and contract-wide volume increase by each bet amount, across
+/// multiple users and both outcomes, and persist unchanged through settlement
+/// and a winner claim.
+#[test]
+fn test_cumulative_volume_tracking() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    client.initialize(&token_id.address(), &token_admin);
+
+    // Two independent pools so we can check contract-wide aggregation.
+    let creator = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    token_admin_client.mint(&alice, &1000);
+    token_admin_client.mint(&bob, &1000);
+
+    let pool_a = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Pool A"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+    let pool_b = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Pool B"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+
+    // New pools start at zero volume.
+    assert_eq!(client.get_pool_volume(&pool_a), 0);
+    assert_eq!(client.get_total_contract_volume(), 0);
+
+    // Multiple users, both outcomes, both pools.
+    client.place_bet(&alice, &pool_a, &0, &100, &None::<Address>);
+    client.place_bet(&bob, &pool_a, &1, &250, &None::<Address>);
+    client.place_bet(&alice, &pool_a, &1, &50, &None::<Address>); // same user, again
+    client.place_bet(&bob, &pool_b, &0, &400, &None::<Address>);
+
+    // Per-pool volume is the lifetime sum of bet amounts in that pool.
+    assert_eq!(client.get_pool_volume(&pool_a), 400);
+    assert_eq!(client.get_pool_volume(&pool_b), 400);
+    // The Pool struct exposes the same figure.
+    assert_eq!(client.get_pool(&pool_a).unwrap().cumulative_volume, 400);
+    // Contract-wide volume aggregates across all pools.
+    assert_eq!(client.get_total_contract_volume(), 800);
+
+    // Settle pool A and have a winner claim; volume must not change.
+    env.ledger().with_mut(|li| li.timestamp = 3601);
+    client.settle_pool(&creator, &pool_a, &0); // outcome 0 (alice's 100) wins
+    assert_eq!(client.get_pool_volume(&pool_a), 400);
+
+    client.claim_winnings(&alice, &pool_a);
+    assert_eq!(
+        client.get_pool_volume(&pool_a),
+        400,
+        "volume must persist through settlement and claims"
+    );
+    assert_eq!(client.get_total_contract_volume(), 800);
+}
+
+/// Unknown pools report zero volume rather than panicking.
+#[test]
+fn test_get_pool_volume_unknown_pool_is_zero() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    client.initialize(&token_id.address(), &token_admin);
+
+    assert_eq!(client.get_pool_volume(&999), 0);
+    assert_eq!(client.get_total_contract_volume(), 0);
+}
+
 // ── Issue #173: get_claim_status read method ──────────────────────────────────
 
 /// Transitions for a winning bettor: NeverBet → NotEligible (open) → Claimable → AlreadyClaimed.
