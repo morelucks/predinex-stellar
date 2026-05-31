@@ -77,6 +77,10 @@ pub enum DataKey {
     /// #179 — per-pool creation fee in stroops. Set by the admin via
     /// `set_creation_fee`; defaults to 0 (no fee) when absent.
     CreationFee,
+    /// Per-address creation-fee exemption flag. When present and `true`, the
+    /// account is not charged the creation fee in `create_pool_internal`. Set
+    /// by the treasury recipient via `set_creation_fee_exemption`.
+    CreationFeeExempt(Address),
     /// #167 — protocol fee in basis points. Set by the treasury recipient via
     /// `set_protocol_fee`; defaults to 200 (2%) when absent.
     ProtocolFee,
@@ -708,6 +712,55 @@ impl PredinexContract {
             .unwrap_or(0)
     }
 
+    /// Grant or revoke a per-address exemption from the creation fee.
+    ///
+    /// Only the treasury recipient may call this (same permission model as
+    /// `set_creation_fee`). When an account is exempt, `create_pool` /
+    /// `create_multi_outcome_pool` / `schedule_pool` will not charge the
+    /// configured creation fee for that creator. Passing `exempt = false`
+    /// removes the exemption so the account is charged normally again.
+    ///
+    /// A `creation_fee_exemption_set` event is emitted with the affected
+    /// account and the new flag so indexers can track exemptions.
+    pub fn set_creation_fee_exemption(
+        env: Env,
+        caller: Address,
+        account: Address,
+        exempt: bool,
+    ) -> Result<(), ContractError> {
+        caller.require_auth();
+        Self::require_treasury_recipient(&env, &caller)?;
+
+        let key = DataKey::CreationFeeExempt(account.clone());
+        if exempt {
+            env.storage().persistent().set(&key, &true);
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, POOL_BUMP_THRESHOLD, POOL_BUMP_TARGET);
+        } else {
+            // Removing the entry keeps storage tidy and is equivalent to the
+            // default (not exempt) for reads.
+            env.storage().persistent().remove(&key);
+        }
+
+        env.events().publish(
+            (
+                Symbol::new(&env, "creation_fee_exemption_set"),
+                event_version(&env),
+            ),
+            (account, exempt),
+        );
+        Ok(())
+    }
+
+    /// Return whether `account` is currently exempt from the creation fee.
+    pub fn is_creation_fee_exempt(env: Env, account: Address) -> bool {
+        env.storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::CreationFeeExempt(account))
+            .unwrap_or(false)
+    }
+
     /// #167 — Set the protocol fee in basis points.
     ///
     /// Only the treasury recipient may call this. The fee must be within
@@ -1258,7 +1311,15 @@ impl PredinexContract {
             .get::<_, i128>(&DataKey::CreationFee)
             .unwrap_or(0);
 
-        if creation_fee > 0 {
+        // Exempt creators (e.g. partners, the treasury, or promotional
+        // accounts) skip the creation fee entirely.
+        let fee_exempt = env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::CreationFeeExempt(creator.clone()))
+            .unwrap_or(false);
+
+        if creation_fee > 0 && !fee_exempt {
             let token_address: Address = env
                 .storage()
                 .persistent()

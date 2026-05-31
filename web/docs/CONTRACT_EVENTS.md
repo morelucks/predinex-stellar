@@ -430,6 +430,24 @@ freeze_admin: Address
 
 ---
 
+### 14. `creation_fee_exemption_set`
+
+Emitted when a per-address exemption from the pool creation fee is granted or revoked.
+
+**Trigger:** `PredinexContract::set_creation_fee_exemption`
+
+**Topics tuple:**
+```
+(Symbol("creation_fee_exemption_set"), Symbol("v1"))
+```
+
+**Data:**
+```
+(account: Address, exempt: bool)
+```
+
+---
+
 ## Parsing guide for frontend / indexers
 
 ### Topic structure

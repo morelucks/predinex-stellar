@@ -2061,6 +2061,115 @@ fn test_set_creation_fee_negative_rejected() {
     client.set_creation_fee(&treasury_recipient, &-1);
 }
 
+/// An exempt creator is not charged the creation fee, even when one is set.
+#[test]
+fn test_creation_fee_exemption_skips_fee() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token::Client::new(&env, &token_id.address());
+
+    let treasury_recipient = Address::generate(&env);
+    client.initialize(&token_id.address(), &treasury_recipient);
+
+    let creation_fee = 500i128;
+    client.set_creation_fee(&treasury_recipient, &creation_fee);
+
+    let creator = Address::generate(&env);
+    // Exempt the creator. Note: no tokens are minted to the creator, so the
+    // pool can only be created if the fee transfer is genuinely skipped.
+    assert!(!client.is_creation_fee_exempt(&creator));
+    client.set_creation_fee_exemption(&treasury_recipient, &creator, &true);
+    assert!(client.is_creation_fee_exempt(&creator));
+
+    let initial_treasury_balance = token.balance(&treasury_recipient);
+
+    let pool_id = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Exempt Pool"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+
+    let pool = client.get_pool(&pool_id);
+    assert!(!pool.unwrap().settled);
+    // No fee moved to the treasury recipient.
+    assert_eq!(token.balance(&treasury_recipient), initial_treasury_balance);
+    assert_eq!(token.balance(&creator), 0);
+}
+
+/// Revoking an exemption restores normal fee charging.
+#[test]
+fn test_creation_fee_exemption_revoked_charges_again() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token::Client::new(&env, &token_id.address());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    let treasury_recipient = Address::generate(&env);
+    client.initialize(&token_id.address(), &treasury_recipient);
+
+    let creation_fee = 500i128;
+    client.set_creation_fee(&treasury_recipient, &creation_fee);
+
+    let creator = Address::generate(&env);
+    client.set_creation_fee_exemption(&treasury_recipient, &creator, &true);
+    client.set_creation_fee_exemption(&treasury_recipient, &creator, &false);
+    assert!(!client.is_creation_fee_exempt(&creator));
+
+    token_admin_client.mint(&creator, &creation_fee);
+    let initial_treasury_balance = token.balance(&treasury_recipient);
+
+    client.create_pool(
+        &creator,
+        &String::from_str(&env, "Charged Pool"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+
+    assert_eq!(
+        token.balance(&treasury_recipient),
+        initial_treasury_balance + creation_fee
+    );
+    assert_eq!(token.balance(&creator), 0);
+}
+
+/// Only the treasury recipient may set a creation-fee exemption.
+#[test]
+#[should_panic]
+fn test_set_creation_fee_exemption_unauthorized_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin);
+
+    let treasury_recipient = Address::generate(&env);
+    client.initialize(&token_id.address(), &treasury_recipient);
+
+    let attacker = Address::generate(&env);
+    let account = Address::generate(&env);
+    client.set_creation_fee_exemption(&attacker, &account, &true);
+}
+
 // ── Issue #173: get_claim_status read method ──────────────────────────────────
 
 /// Transitions for a winning bettor: NeverBet → NotEligible (open) → Claimable → AlreadyClaimed.
@@ -3540,7 +3649,11 @@ fn test_list_pools_partial_page_at_boundary() {
     make_pool(&t);
     // start=3, limit=10 — only pool 3 remains.
     let result = t.client.list_pools(&3, &10);
-    assert_eq!(result.len(), 1, "partial page at boundary must return remaining pools");
+    assert_eq!(
+        result.len(),
+        1,
+        "partial page at boundary must return remaining pools"
+    );
 }
 
 #[test]
@@ -3578,9 +3691,18 @@ fn test_list_pools_insertion_order_preserved() {
     let result = t.client.list_pools(&1, &3);
     assert_eq!(result.len(), 3);
     // Pools are returned in ascending ID order (insertion order).
-    assert_eq!(result.get(0).unwrap().creator, t.client.get_pool(&id1).unwrap().creator);
-    assert_eq!(result.get(1).unwrap().creator, t.client.get_pool(&id2).unwrap().creator);
-    assert_eq!(result.get(2).unwrap().creator, t.client.get_pool(&id3).unwrap().creator);
+    assert_eq!(
+        result.get(0).unwrap().creator,
+        t.client.get_pool(&id1).unwrap().creator
+    );
+    assert_eq!(
+        result.get(1).unwrap().creator,
+        t.client.get_pool(&id2).unwrap().creator
+    );
+    assert_eq!(
+        result.get(2).unwrap().creator,
+        t.client.get_pool(&id3).unwrap().creator
+    );
 }
 
 #[test]
@@ -3642,7 +3764,10 @@ fn test_claim_expired_no_fee_deducted() {
 
     let refund = t.client.claim_expired(&t.user, &pool_id);
     // Full amount back — no protocol fee on expired refunds.
-    assert_eq!(refund, 500i128, "no fee must be deducted from expired refund");
+    assert_eq!(
+        refund, 500i128,
+        "no fee must be deducted from expired refund"
+    );
 }
 
 #[test]
@@ -3725,5 +3850,8 @@ fn test_claim_expired_removes_bet_record() {
 
     // Bet record must be gone after claim.
     let bet = t.client.get_user_bet(&pool_id, &t.user);
-    assert!(bet.is_none(), "bet record must be removed after claim_expired");
+    assert!(
+        bet.is_none(),
+        "bet record must be removed after claim_expired"
+    );
 }
