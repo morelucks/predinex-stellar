@@ -3106,7 +3106,10 @@ impl PredinexContract {
         // none apply). When tiers are configured we lock the resolved bps for
         // this pool so winner claims deduct exactly the fee fixed here.
         let fee_bps = Self::resolve_fee_bps_for_volume(env, total_pool_volume);
-        let fee_amount = (total_pool_volume * fee_bps as i128) / 10000;
+        let fee_amount = total_pool_volume
+            .checked_mul(fee_bps as i128)
+            .ok_or(ContractError::PoolTotalOverflow)?
+            / 10000;
         if env.storage().persistent().has(&DataKey::VolumeFeeTiers) {
             env.storage()
                 .persistent()
@@ -3468,10 +3471,16 @@ impl PredinexContract {
         let total_pool_balance = Self::sum_totals(&totals)?;
 
         let fee_bps = Self::pool_effective_fee_bps(env, pool_id);
-        let fee = (total_pool_balance * fee_bps) / 10000;
+        let fee = total_pool_balance
+            .checked_mul(fee_bps)
+            .ok_or(ContractError::PoolTotalOverflow)?
+            / 10000;
         let net_pool_balance = total_pool_balance - fee;
 
-        let winnings = (user_winning_bet * net_pool_balance) / pool_winning_total;
+        let winnings = user_winning_bet
+            .checked_mul(net_pool_balance)
+            .ok_or(ContractError::PoolTotalOverflow)?
+            / pool_winning_total;
 
         // #158 — load (or default) the per-pool payout state and figure out
         // (a) whether this is the first claim (so we credit the fee), and
@@ -3816,9 +3825,15 @@ impl PredinexContract {
                 Err(_) => continue,
             };
             let fee_bps = Self::pool_effective_fee_bps(&env, pool_id);
-            let fee = (total_pool_balance * fee_bps) / 10000;
+            let fee = total_pool_balance
+                .checked_mul(fee_bps)
+                .ok_or(ContractError::PoolTotalOverflow)?
+                / 10000;
             let net_pool_balance = total_pool_balance - fee;
-            let winnings = (user_winning_bet * net_pool_balance) / pool_winning_total;
+            let winnings = user_winning_bet
+                .checked_mul(net_pool_balance)
+                .ok_or(ContractError::PoolTotalOverflow)?
+                / pool_winning_total;
 
             let mut payout_state: PoolPayoutState = env
                 .storage()
@@ -5084,9 +5099,15 @@ impl PredinexContract {
             Err(_) => return ClaimPreview::Unclaimable,
         };
         let fee_bps = Self::pool_effective_fee_bps(&env, pool_id);
-        let fee = (total_pool_balance * fee_bps) / 10000;
+        let fee = total_pool_balance
+            .checked_mul(fee_bps)
+            .ok_or(ContractError::PoolTotalOverflow)?
+            / 10000;
         let net_pool_balance = total_pool_balance - fee;
-        let amount = (user_winning_bet * net_pool_balance) / pool_winning_total;
+        let amount = user_winning_bet
+            .checked_mul(net_pool_balance)
+            .ok_or(ContractError::PoolTotalOverflow)?
+            / pool_winning_total;
 
         ClaimPreview::Claimable(amount)
     }
