@@ -1,10 +1,14 @@
 #![no_std]
+// The soroban contractimpl/contractclient macros generate functions that exceed
+// clippy's default argument limit. Allow this for macro-generated code only.
+#![allow(clippy::too_many_arguments)]
 extern crate alloc;
 use alloc::vec;
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, token, Address, Env, String, Symbol, Vec,
 };
 
+mod benchmark_tests;
 mod bet_management_tests;
 mod fuzz_tests;
 mod multi_user_tests;
@@ -4440,6 +4444,34 @@ impl PredinexContract {
         };
         env.events()
             .publish((event_name, event_version(&env)), caller);
+        Ok(())
+    }
+
+    /// #456 — Pause the contract. Convenience wrapper around `set_paused(true)`.
+    /// Only the treasury recipient (admin) may call this.
+    /// Emits a `PoolPaused` event.
+    pub fn pause_contract(env: Env, caller: Address) -> Result<(), ContractError> {
+        caller.require_auth();
+        Self::require_treasury_recipient(&env, &caller)?;
+        env.storage().persistent().set(&DataKey::Paused, &true);
+        env.events().publish(
+            (Symbol::new(&env, "PoolPaused"), event_version(&env)),
+            caller,
+        );
+        Ok(())
+    }
+
+    /// #456 — Unpause the contract. Convenience wrapper around `set_paused(false)`.
+    /// Only the treasury recipient (admin) may call this.
+    /// Emits a `PoolUnpaused` event.
+    pub fn unpause_contract(env: Env, caller: Address) -> Result<(), ContractError> {
+        caller.require_auth();
+        Self::require_treasury_recipient(&env, &caller)?;
+        env.storage().persistent().set(&DataKey::Paused, &false);
+        env.events().publish(
+            (Symbol::new(&env, "PoolUnpaused"), event_version(&env)),
+            caller,
+        );
         Ok(())
     }
 
