@@ -3,7 +3,7 @@
 import { RotateCcw, SlidersHorizontal } from 'lucide-react';
 import SearchBar from './SearchBar';
 import type { MarketFilters, MarketStatusFilter, SortOption, TimeRangeFilter } from '../lib/market-types';
-import { TOKEN_SYMBOL } from '../lib/formatting';
+import { TOKEN_SYMBOL } from '@/lib/formatting';
 
 interface MarketFilterBarProps {
   filters: MarketFilters;

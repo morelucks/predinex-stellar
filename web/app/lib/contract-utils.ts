@@ -1,40 +1,14 @@
 /**
- * Contract utility functions for common operations
- * Provides helper functions for contract interactions
+ * Contract utility functions for common operations.
+ * Formatting and unit conversion live in the shared formatting module.
  */
 
-import { uintCV, principalCV, stringAsciiCV } from "@stacks/transactions";
-
-/**
- * Convert STX amount to microSTX (multiply by 1,000,000)
- * @param stxAmount Amount in STX
- * @returns Amount in microSTX
- */
-export function stxToMicroStx(stxAmount: number): number {
-  return Math.floor(stxAmount * 1_000_000);
-}
-
-/**
- * Convert microSTX to STX (divide by 1,000,000)
- * @param microStxAmount Amount in microSTX
- * @returns Amount in STX
- */
-export function microStxToStx(microStxAmount: number): number {
-  return microStxAmount / 1_000_000;
-}
-
-/**
- * Format STX amount for display with proper decimals
- * @param microStxAmount Amount in microSTX
- * @returns Formatted string
- */
-export function formatStxAmount(microStxAmount: number): string {
-  const stxAmount = microStxToStx(microStxAmount);
-  return stxAmount.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 6,
-  });
-}
+export {
+  formatPercentage,
+  formatStxAmount,
+  microStxToStx,
+  stxToMicroStx,
+} from '@/lib/formatting';
 
 /**
  * Validate STX amount is positive and above minimum
@@ -90,13 +64,4 @@ export function calculatePotentialWinnings(
  */
 export function calculateProfitLoss(betAmount: number, winnings: number): number {
   return winnings - betAmount;
-}
-
-/**
- * Format percentage for display
- * @param percentage Percentage value
- * @returns Formatted string
- */
-export function formatPercentage(percentage: number): string {
-  return `${percentage.toFixed(1)}%`;
 }
