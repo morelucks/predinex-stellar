@@ -3516,6 +3516,9 @@ impl PredinexContract {
 
         let totals = Self::read_outcome_totals(env, pool_id, &pool);
         let pool_winning_total = totals.get(winning_outcome).unwrap();
+        if pool_winning_total == 0 {
+            return Err(ContractError::NoWinningBets);
+        }
         let total_pool_balance = Self::sum_totals(&totals)?;
 
         let fee_bps = Self::pool_effective_fee_bps(env, pool_id);
