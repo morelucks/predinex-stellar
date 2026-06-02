@@ -3,12 +3,36 @@
  * Formatting and unit conversion live in the shared formatting module.
  */
 
-export {
-  formatPercentage,
-  formatStxAmount,
-  microStxToStx,
-  stxToMicroStx,
-} from '@/lib/formatting';
+/**
+ * Convert STX amount to microSTX (multiply by 1,000,000)
+ * @param stxAmount Amount in STX
+ * @returns Amount in microSTX
+ */
+export function stxToMicroStx(stxAmount: bigint): bigint {
+  return stxAmount * BigInt(1_000_000);
+}
+
+/**
+ * Convert microSTX to STX (divide by 1,000,000)
+ * @param microStxAmount Amount in microSTX
+ * @returns Amount in STX
+ */
+export function microStxToStx(microStxAmount: bigint): number {
+  return Number(microStxAmount) / 1_000_000;
+}
+
+/**
+ * Format STX amount for display with proper decimals
+ * @param microStxAmount Amount in microSTX
+ * @returns Formatted string
+ */
+export function formatStxAmount(microStxAmount: bigint): string {
+  const stxAmount = microStxToStx(microStxAmount);
+  return stxAmount.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  });
+}
 
 /**
  * Validate STX amount is positive and above minimum
