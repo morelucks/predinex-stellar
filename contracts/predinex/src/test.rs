@@ -5128,3 +5128,157 @@ fn m9_update_twap_emits_twap_updated_event() {
     assert_eq!(payload.odds.get(1).unwrap(), 2000); // 100/500 * 10000
 }
 
+// ── Issue #561: get_pool_count ───────────────────────────────────────────────
+
+#[test]
+fn test_get_pool_count_increments_on_create() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+    client.initialize(&token, &admin);
+
+    // Before any pool, PoolCounter defaults to 1 (next available pool ID).
+    assert_eq!(client.get_pool_count(), 1u32, "counter must be 1 before any pool is created");
+
+    client.create_pool(
+        &admin,
+        &String::from_str(&env, "Pool One"),
+        &String::from_str(&env, "First pool"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600u64,
+    );
+    assert_eq!(client.get_pool_count(), 2u32, "counter must advance to 2 after first pool");
+
+    client.create_pool(
+        &admin,
+        &String::from_str(&env, "Pool Two"),
+        &String::from_str(&env, "Second pool"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600u64,
+    );
+    assert_eq!(client.get_pool_count(), 3u32, "counter must advance to 3 after second pool");
+}
+
+// ── Issue #562: get_user_bet ─────────────────────────────────────────────────
+// Core coverage is provided by test_get_user_bet_returns_correct_amounts and
+// test_get_user_bet_returns_none_for_user_with_no_bet (above).
+// This test verifies the function after multiple bets on the same pool.
+
+#[test]
+fn test_get_user_bet_reflects_cumulative_stake() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+    client.initialize(&token, &admin);
+
+    let pool_id = client.create_pool(
+        &admin,
+        &String::from_str(&env, "Cumulative Bet Pool"),
+        &String::from_str(&env, "Testing cumulative stake"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600u64,
+    );
+
+    let token_client = soroban_sdk::token::StellarAssetClient::new(&env, &token);
+    token_client.mint(&user, &600i128);
+
+    // Bet placed: no record yet
+    let before = client.get_user_bet(&pool_id, &user);
+    assert!(before.is_none(), "get_user_bet must return None before any bet");
+
+    client.place_bet(&user, &pool_id, &0u32, &200i128, &None::<Address>);
+    let after_first = client
+        .get_user_bet(&pool_id, &user)
+        .expect("bet must exist after first place_bet");
+    assert_eq!(after_first.amount_a, 200i128);
+    assert_eq!(after_first.amount_b, 0i128);
+    assert_eq!(after_first.total_bet, 200i128);
+
+    client.place_bet(&user, &pool_id, &1u32, &400i128, &None::<Address>);
+    let after_second = client
+        .get_user_bet(&pool_id, &user)
+        .expect("bet must exist after second place_bet");
+    assert_eq!(after_second.amount_a, 200i128);
+    assert_eq!(after_second.amount_b, 400i128);
+    assert_eq!(after_second.total_bet, 600i128);
+}
+
+// ── Issue #563: get_total_volume ─────────────────────────────────────────────
+
+#[test]
+fn test_get_total_volume_zero_before_bets() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+    client.initialize(&token, &admin);
+
+    assert_eq!(
+        client.get_total_volume(),
+        0i128,
+        "get_total_volume must return 0 when no bets have been placed"
+    );
+}
+
+#[test]
+fn test_get_total_volume_accumulates_across_bets() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+    client.initialize(&token, &admin);
+
+    let pool_id = client.create_pool(
+        &admin,
+        &String::from_str(&env, "Volume Test Pool"),
+        &String::from_str(&env, "Testing total volume accumulation"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600u64,
+    );
+
+    let token_client = soroban_sdk::token::StellarAssetClient::new(&env, &token);
+    token_client.mint(&user, &1000i128);
+
+    client.place_bet(&user, &pool_id, &0u32, &300i128, &None::<Address>);
+    assert_eq!(
+        client.get_total_volume(),
+        300i128,
+        "volume must equal the first bet amount"
+    );
+
+    client.place_bet(&user, &pool_id, &1u32, &450i128, &None::<Address>);
+    assert_eq!(
+        client.get_total_volume(),
+        750i128,
+        "volume must accumulate across multiple bets"
+    );
+}
+

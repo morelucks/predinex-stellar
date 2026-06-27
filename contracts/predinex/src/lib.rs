@@ -5227,6 +5227,19 @@ impl PredinexContract {
             .unwrap_or(0)
     }
 
+    /// Return the contract-wide cumulative betting volume across all pools.
+    ///
+    /// Public alias for `get_total_contract_volume` so frontends that call
+    /// `get_total_volume` have a stable entry point. Both functions read the
+    /// same `DataKey::TotalContractVolume` accumulator, which is incremented
+    /// by every `place_bet` and never decremented.
+    pub fn get_total_volume(env: Env) -> i128 {
+        env.storage()
+            .persistent()
+            .get::<_, i128>(&DataKey::TotalContractVolume)
+            .unwrap_or(0)
+    }
+
     // ── #420 Referral tracking ────────────────────────────────────────────────
 
     /// Set the referral fee in basis points. 0 disables referrals.
