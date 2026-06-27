@@ -10,10 +10,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### ⛓ Contract
-<!-- Changes to Clarity contracts in contracts/ -->
+- Fixed pool counter off-by-one: first pool now starts at ID 1 and `get_pool_count` returns the actual count instead of `count + 1` (closes #597)
+- `get_pools_batch` added for efficient batch pool queries, reducing N+1 contract calls to 2 (closes #604)
 
 ### 🌐 Web
-<!-- Changes to the Next.js frontend in web/ -->
+- Updated `getMarkets` and `fetchAllPools` to use the corrected pool count from `get_pool_count`
 
 ### 📖 Docs
 <!-- README, RELEASE, architectural docs, inline documentation -->
@@ -29,6 +30,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Added preview deployment issue template
 - Added setup script for configuring preview deployments (`scripts/setup-preview-deployments.sh`)
 - Added Vercel configuration file (`web/vercel.json`)
+- Fixed `tag-release.yml` to use `PAT_TOKEN` instead of `GITHUB_TOKEN` so tag pushes trigger downstream CI workflows (closes #600)
 
 ---
 
