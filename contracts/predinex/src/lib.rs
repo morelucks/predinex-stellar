@@ -22,6 +22,7 @@ mod fuzz;
 mod e2e_tests;
 mod webhook_test;
 mod multi_asset_tests;
+mod create_pool_validation_tests;
 
 // ── Issue #175: Event schema versioning ──────────────────────────────────────
 //
@@ -225,8 +226,10 @@ const MAX_WEBHOOK_URL_LENGTH: u32 = 512;
 
 /// #151 — Minimum pool lifetime in seconds (matches `web/docs/POOL_DURATION.md`).
 const MIN_POOL_DURATION_SECS: u64 = 300;
-/// #151 — Maximum pool lifetime in seconds (matches web validators / tests).
-const MAX_POOL_DURATION_SECS: u64 = 1_000_000;
+/// #570 — Maximum pool lifetime in seconds (~1 year).
+const MAX_POOL_DURATION_SECS: u64 = 31_536_000;
+/// #570 — Minimum creator deposit in stroops (1 XLM).
+pub const MIN_CREATOR_DEPOSIT: i128 = 10_000_000;
 
 /// #154 — Maximum length for pool title in bytes.
 const MAX_TITLE_LENGTH: u32 = 100;
@@ -325,6 +328,10 @@ pub enum ContractError {
     /// #481 — The pool is multi-asset; callers must use
     /// `claim_multi_asset_winnings` instead of `claim_winnings`.
     MultiAssetClaimRequired = 57,
+    /// #570 — Pool deadline is in the past.
+    DeadlineInPast = 58,
+    /// #570 — Creator deposit is below MIN_CREATOR_DEPOSIT.
+    InsufficientCreatorDeposit = 59,
 }
 
 /// #176 — Settlement source tag indicating who initiated pool settlement.
@@ -1747,6 +1754,14 @@ impl PredinexContract {
         if duration == 0 || duration > MAX_POOL_DURATION_SECS {
             return Err(ContractError::DurationTooLong);
         }
+        // #570 — The computed deadline must be strictly in the future.
+        let deadline = created_at
+            .checked_add(duration)
+            .ok_or(ContractError::ExpiryOverflow)?;
+        if deadline <= env.ledger().timestamp() {
+            return Err(ContractError::DeadlineInPast);
+        }
+
         if twap_period_secs == 0 {
             return Err(ContractError::DurationTooShort);
         }
@@ -1781,9 +1796,7 @@ impl PredinexContract {
         }
 
         let pool_id = Self::get_pool_counter(env);
-        let expiry = created_at
-            .checked_add(duration)
-            .ok_or(ContractError::ExpiryOverflow)?;
+        let expiry = deadline;
         let outcome_a = outcomes.get(0).unwrap();
         let outcome_b = outcomes.get(1).unwrap();
 
@@ -1873,8 +1886,14 @@ impl PredinexContract {
         outcome_a: String,
         outcome_b: String,
         duration: u64,
+        amount: i128,
     ) -> Result<u32, ContractError> {
         creator.require_auth();
+
+        // #570 — Minimum creator deposit.
+        if amount < MIN_CREATOR_DEPOSIT {
+            return Err(ContractError::InsufficientCreatorDeposit);
+        }
 
         let mut outcomes = Vec::new(&env);
         outcomes.push_back(outcome_a);
