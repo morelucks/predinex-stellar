@@ -20,7 +20,7 @@ import type { Pool } from '../../app/lib/stacks-api';
 // Shared mocks
 // ---------------------------------------------------------------------------
 
-vi.mock('../../app/components/WalletAdapterProvider', () => ({
+vi.mock('@/components/WalletAdapterProvider', () => ({
   useWallet: vi.fn(() => ({
     chain: 'stacks',
     isConnected: false,
@@ -32,7 +32,7 @@ vi.mock('../../app/components/WalletAdapterProvider', () => ({
   WalletAdapterProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('../../app/components/NetworkMismatchWarning', () => ({
+vi.mock('@/components/NetworkMismatchWarning', () => ({
   NetworkMismatchWarning: () => null,
   default: () => null,
 }));
@@ -74,7 +74,7 @@ const DESKTOP_WIDTH = 1280;
 // Navbar
 // ---------------------------------------------------------------------------
 
-import Navbar from '../../app/components/Navbar';
+import Navbar from '@/components/Navbar';
 
 describe('Navbar — mobile viewport', () => {
   beforeEach(() => setViewport(MOBILE_WIDTH));
@@ -130,7 +130,7 @@ describe('Navbar — mobile viewport', () => {
 // WalletModal
 // ---------------------------------------------------------------------------
 
-import WalletModal from '../../app/components/WalletModal';
+import WalletModal from '@/components/WalletModal';
 
 vi.mock('../../app/lib/wallet-connector', () => ({
   isWalletAvailable: vi.fn(() => false),
@@ -183,7 +183,7 @@ describe('WalletModal — mobile viewport', () => {
 // MarketGrid
 // ---------------------------------------------------------------------------
 
-import MarketGrid from '../../components/MarketGrid';
+import MarketGrid from '@/components/MarketGrid';
 
 vi.mock('../../components/MarketCard', () => ({
   default: ({ market }: { market: Pool }) => (
