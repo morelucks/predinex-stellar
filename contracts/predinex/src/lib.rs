@@ -4,7 +4,7 @@
 #![allow(clippy::too_many_arguments)]
 extern crate alloc;
 use alloc::vec;
-use soroban_sdk::{
+use soroban_sdk::{panic_with_error, 
     contract, contracterror, contractimpl, contracttype, token, Address, Env, String, Symbol, Vec,
 };
 
@@ -1890,6 +1890,9 @@ impl PredinexContract {
         outcome_b: String,
         duration: u64,
     ) -> Result<u32, ContractError> {
+        if !Self::is_initialized(&env) {
+            panic_with_error!(&env, ContractError::NotInitialized);
+        }
         creator.require_auth();
 
         let mut outcomes = Vec::new(&env);
@@ -2159,6 +2162,9 @@ impl PredinexContract {
         amount: i128,
         referrer: Option<Address>,
     ) -> Result<(), ContractError> {
+        if !Self::is_initialized(&env) {
+            panic_with_error!(&env, ContractError::NotInitialized);
+        }
         user.require_auth();
 
         Self::require_not_paused(&env)?;
@@ -2256,11 +2262,11 @@ impl PredinexContract {
             .unwrap_or(DEFAULT_MAX_BET_STROOPS);
 
         if min_bet > 0 && amount < min_bet {
-            return Err(ContractError::InvalidBetAmount);
+            return Err(ContractError::BetBelowMinBet);
         }
         // max_bet == 0 => no maximum.
         if max_bet > 0 && amount > max_bet {
-            return Err(ContractError::InvalidBetAmount);
+            return Err(ContractError::BetAboveMaxBet);
         }
 
         let mut totals = Self::read_outcome_totals(&env, pool_id, &pool);
@@ -3225,6 +3231,9 @@ impl PredinexContract {
         pool_id: u32,
         winning_outcome: u32,
     ) -> Result<(), ContractError> {
+        if !Self::is_initialized(&env) {
+            panic_with_error!(&env, ContractError::NotInitialized);
+        }
         caller.require_auth();
         Self::settle_single_pool(&env, &caller, pool_id, winning_outcome)
     }
@@ -3464,8 +3473,9 @@ impl PredinexContract {
     ///
     /// # Payout rounding policy (#158)
     /// Per-claim payout is computed via integer floor division:
-    ///
-    ///     winnings = floor(user_winning_bet * net_pool_balance / pool_winning_total)
+    /// ```text
+    /// winnings = floor(user_winning_bet * net_pool_balance / pool_winning_total)
+    /// ```
     ///
     /// where `net_pool_balance = total_pool_balance - fee` and
     /// `fee = floor(total_pool_balance * 2 / 100)`. Because every claim rounds
@@ -3476,12 +3486,17 @@ impl PredinexContract {
     /// winner). The 2 % protocol fee is credited to the treasury only on the
     /// **first** claim. After every winner has claimed:
     ///
-    ///     total_pool_balance == fee + payout_dust + sum(payouts)
-    ///     contract_balance_attributable_to_pool == fee + payout_dust
-    ///                                           == treasury_credit_for_pool
+    /// ```text
+    /// total_pool_balance == fee + payout_dust + sum(payouts)
+    /// contract_balance_attributable_to_pool == fee + payout_dust
+    ///                                       == treasury_credit_for_pool
+    /// ```
     ///
     /// See `web/docs/PAYOUT_ROUNDING.md` for indexer / UI guidance.
     pub fn claim_winnings(env: Env, user: Address, pool_id: u32) -> Result<i128, ContractError> {
+        if !Self::is_initialized(&env) {
+            panic_with_error!(&env, ContractError::NotInitialized);
+        }
         user.require_auth();
         Self::claim_winnings_internal(&env, user, pool_id)
     }
@@ -4392,6 +4407,9 @@ impl PredinexContract {
     /// Return pool data and extend its TTL on every read so active pools stay
     /// accessible throughout their lifecycle. (#189)
     pub fn get_pool(env: Env, pool_id: u32) -> Option<Pool> {
+        if !Self::is_initialized(&env) {
+            panic_with_error!(&env, ContractError::NotInitialized);
+        }
         let pool: Option<Pool> = env.storage().persistent().get(&DataKey::Pool(pool_id));
         if pool.is_some() {
             env.storage().persistent().extend_ttl(
@@ -4451,6 +4469,9 @@ impl PredinexContract {
     }
 
     pub fn get_pool_count(env: Env) -> u32 {
+        if !Self::is_initialized(&env) {
+            panic_with_error!(&env, ContractError::NotInitialized);
+        }
         env.storage()
             .persistent()
             .get(&DataKey::PoolCounter)
@@ -4896,6 +4917,11 @@ impl PredinexContract {
         result
     }
 
+
+    fn is_initialized(env: &Env) -> bool {
+        env.storage().persistent().has(&DataKey::Token)
+    }
+
     fn get_pool_counter(env: &Env) -> u32 {
         env.storage()
             .persistent()
@@ -5045,6 +5071,9 @@ impl PredinexContract {
 
     /// Return the user's bet record and extend its TTL on every read. (#189)
     pub fn get_user_bet(env: Env, pool_id: u32, user: Address) -> Option<UserBet> {
+        if !Self::is_initialized(&env) {
+            panic_with_error!(&env, ContractError::NotInitialized);
+        }
         let key = DataKey::UserBet(pool_id, user);
         let bet: Option<UserBet> = env.storage().persistent().get(&key);
         if bet.is_some() {

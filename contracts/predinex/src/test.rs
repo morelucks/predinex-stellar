@@ -20,6 +20,7 @@ fn test_create_pool() {
 
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
+    client.initialize(&Address::generate(&env), &Address::generate(&env));
 
     let creator = Address::generate(&env);
     let title = String::from_str(&env, "Market 1");
@@ -70,6 +71,7 @@ fn test_create_pool_accepts_duration_just_below_maximum() {
 
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
+    client.initialize(&Address::generate(&env), &Address::generate(&env));
 
     env.ledger().with_mut(|li| li.timestamp = 42);
 
@@ -4141,6 +4143,7 @@ fn test_list_pools_empty_returns_empty() {
     env.mock_all_auths();
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
+    client.initialize(&Address::generate(&env), &Address::generate(&env));
     let result = client.list_pools(&1, &20);
     assert_eq!(result.len(), 0, "no pools created must return empty vec");
 }
@@ -5128,3 +5131,80 @@ fn m9_update_twap_emits_twap_updated_event() {
     assert_eq!(payload.odds.get(1).unwrap(), 2000); // 100/500 * 10000
 }
 
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_create_pool_not_initialized() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, PredinexContract);
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.create_pool(
+        &Address::generate(&env),
+        &String::from_str(&env, "Title"),
+        &String::from_str(&env, "Description"),
+        &String::from_str(&env, "A"),
+        &String::from_str(&env, "B"),
+        &3600,
+    );
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_place_bet_not_initialized() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, PredinexContract);
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.place_bet(&Address::generate(&env), &1, &0, &100, &None);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_settle_pool_not_initialized() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, PredinexContract);
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.settle_pool(&Address::generate(&env), &1, &0);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_claim_winnings_not_initialized() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, PredinexContract);
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.claim_winnings(&Address::generate(&env), &1);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_get_pool_not_initialized() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, PredinexContract);
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.get_pool(&1);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_get_user_bet_not_initialized() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, PredinexContract);
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.get_user_bet(&1, &Address::generate(&env));
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_get_pool_count_not_initialized() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, PredinexContract);
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.get_pool_count();
+}

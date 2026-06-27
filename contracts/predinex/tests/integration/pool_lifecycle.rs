@@ -109,7 +109,7 @@ fn l2_lp_deposit_bet_settle_lp_withdraw() {
 
 /// L3: Bettor on losing side has no winnings to claim.
 #[test]
-#[should_panic(expected = "No winnings to claim")]
+#[should_panic(expected = "Error(Contract, #25)")]
 fn l3_losing_bettor_cannot_claim() {
     let ctx = setup();
     let creator = Address::generate(&ctx.env);
@@ -169,7 +169,7 @@ fn l4_two_winners_proportional_payout() {
 
 /// E1: Premature withdrawal attempt (bet after pool expired is rejected).
 #[test]
-#[should_panic(expected = "Pool expired")]
+#[should_panic(expected = "Error(Contract, #7)")]
 fn e1_bet_after_expiry_rejected() {
     let ctx = setup();
     let creator = Address::generate(&ctx.env);
@@ -184,7 +184,7 @@ fn e1_bet_after_expiry_rejected() {
 
 /// E2: Claiming on an unsettled pool panics.
 #[test]
-#[should_panic(expected = "Pool not settled")]
+#[should_panic(expected = "Error(Contract, #18)")]
 fn e2_claim_before_settlement_rejected() {
     let ctx = setup();
     let creator = Address::generate(&ctx.env);
@@ -200,7 +200,7 @@ fn e2_claim_before_settlement_rejected() {
 
 /// E3: Settling before expiry is rejected.
 #[test]
-#[should_panic(expected = "Pool has not expired yet")]
+#[should_panic(expected = "Error(Contract, #8)")]
 fn e3_settle_before_expiry_rejected() {
     let ctx = setup();
     let creator = Address::generate(&ctx.env);
@@ -268,7 +268,7 @@ fn e8_voided_pool_issues_refunds() {
 
 /// E9: Dispute after window expires is rejected.
 #[test]
-#[should_panic(expected = "Dispute window expired")]
+#[should_panic(expected = "Error(Contract, #28)")]
 fn e9_dispute_after_window_rejected() {
     let ctx = setup();
     let creator = Address::generate(&ctx.env);
