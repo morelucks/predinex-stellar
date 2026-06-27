@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 6,
+    "address": 3,
     "nonce": 0,
     "mux_id": 0
   },
@@ -27,31 +27,10 @@
     ],
     [],
     [],
+    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL",
-              "function_name": "mint",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
-                },
-                {
-                  "i128": "1000"
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
         {
           "function": {
             "contract_fn": {
@@ -59,19 +38,19 @@
               "function_name": "create_pool",
               "args": [
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                 },
                 {
-                  "string": "Settle Event Pool"
+                  "string": "Pool One"
                 },
                 {
-                  "string": "Testing settle_pool event"
+                  "string": "First pool"
                 },
                 {
-                  "string": "A"
+                  "string": "Yes"
                 },
                 {
-                  "string": "B"
+                  "string": "No"
                 },
                 {
                   "u64": "3600"
@@ -83,73 +62,33 @@
         }
       ]
     ],
+    [],
     [
       [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
         {
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-              "function_name": "place_bet",
+              "function_name": "create_pool",
               "args": [
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                 },
                 {
-                  "u32": 1
+                  "string": "Pool Two"
                 },
                 {
-                  "u32": 0
+                  "string": "Second pool"
                 },
                 {
-                  "i128": "500"
-                },
-                "void"
-              ]
-            }
-          },
-          "sub_invocations": [
-            {
-              "function": {
-                "contract_fn": {
-                  "contract_address": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL",
-                  "function_name": "transfer",
-                  "args": [
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                    },
-                    {
-                      "i128": "500"
-                    }
-                  ]
-                }
-              },
-              "sub_invocations": []
-            }
-          ]
-        }
-      ]
-    ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-              "function_name": "settle_pool",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                  "string": "Yes"
                 },
                 {
-                  "u32": 1
+                  "string": "No"
                 },
                 {
-                  "u32": 0
+                  "u64": "3600"
                 }
               ]
             }
@@ -163,7 +102,7 @@
   "ledger": {
     "protocol_version": 26,
     "sequence_number": 0,
-    "timestamp": 4000,
+    "timestamp": 0,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
     "base_reserve": 0,
     "min_persistent_entry_ttl": 4096,
@@ -220,7 +159,7 @@
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
               "key": {
                 "ledger_key_nonce": {
-                  "nonce": "5541220902715666415"
+                  "nonce": "1033654523790656264"
                 }
               },
               "durability": "temporary",
@@ -237,23 +176,19 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
               "key": {
-                "vec": [
-                  {
-                    "symbol": "Admin"
-                  }
-                ]
+                "ledger_key_nonce": {
+                  "nonce": "5541220902715666415"
+                }
               },
-              "durability": "persistent",
-              "val": {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-              }
+              "durability": "temporary",
+              "val": "void"
             }
           },
           "ext": "v0"
         },
-        "live_until": 4095
+        "live_until": 6311999
       },
       {
         "entry": {
@@ -304,7 +239,7 @@
                       "symbol": "created_at"
                     },
                     "val": {
-                      "u64": "100"
+                      "u64": "0"
                     }
                   },
                   {
@@ -312,7 +247,7 @@
                       "symbol": "creator"
                     },
                     "val": {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                     }
                   },
                   {
@@ -320,7 +255,7 @@
                       "symbol": "cumulative_volume"
                     },
                     "val": {
-                      "i128": "500"
+                      "i128": "0"
                     }
                   },
                   {
@@ -328,7 +263,7 @@
                       "symbol": "description"
                     },
                     "val": {
-                      "string": "Testing settle_pool event"
+                      "string": "First pool"
                     }
                   },
                   {
@@ -336,7 +271,7 @@
                       "symbol": "expiry"
                     },
                     "val": {
-                      "u64": "3700"
+                      "u64": "3600"
                     }
                   },
                   {
@@ -344,7 +279,7 @@
                       "symbol": "outcome_a_name"
                     },
                     "val": {
-                      "string": "A"
+                      "string": "Yes"
                     }
                   },
                   {
@@ -352,7 +287,7 @@
                       "symbol": "outcome_b_name"
                     },
                     "val": {
-                      "string": "B"
+                      "string": "No"
                     }
                   },
                   {
@@ -360,7 +295,7 @@
                       "symbol": "participant_count"
                     },
                     "val": {
-                      "u32": 1
+                      "u32": 0
                     }
                   },
                   {
@@ -368,7 +303,7 @@
                       "symbol": "settled"
                     },
                     "val": {
-                      "bool": true
+                      "bool": false
                     }
                   },
                   {
@@ -378,10 +313,7 @@
                     "val": {
                       "vec": [
                         {
-                          "symbol": "Settled"
-                        },
-                        {
-                          "u32": 0
+                          "symbol": "Open"
                         }
                       ]
                     }
@@ -391,7 +323,7 @@
                       "symbol": "title"
                     },
                     "val": {
-                      "string": "Settle Event Pool"
+                      "string": "Pool One"
                     }
                   },
                   {
@@ -399,7 +331,7 @@
                       "symbol": "total_a"
                     },
                     "val": {
-                      "i128": "500"
+                      "i128": "0"
                     }
                   },
                   {
@@ -414,9 +346,149 @@
                     "key": {
                       "symbol": "winning_outcome"
                     },
+                    "val": "void"
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 518400
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Pool"
+                  },
+                  {
+                    "u32": 2
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "created_at"
+                    },
+                    "val": {
+                      "u64": "0"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "creator"
+                    },
+                    "val": {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "cumulative_volume"
+                    },
+                    "val": {
+                      "i128": "0"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "description"
+                    },
+                    "val": {
+                      "string": "Second pool"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "expiry"
+                    },
+                    "val": {
+                      "u64": "3600"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "outcome_a_name"
+                    },
+                    "val": {
+                      "string": "Yes"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "outcome_b_name"
+                    },
+                    "val": {
+                      "string": "No"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "participant_count"
+                    },
                     "val": {
                       "u32": 0
                     }
+                  },
+                  {
+                    "key": {
+                      "symbol": "settled"
+                    },
+                    "val": {
+                      "bool": false
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "status"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "symbol": "Open"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "title"
+                    },
+                    "val": {
+                      "string": "Pool Two"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "total_a"
+                    },
+                    "val": {
+                      "i128": "0"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "total_b"
+                    },
+                    "val": {
+                      "i128": "0"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "winning_outcome"
+                    },
+                    "val": "void"
                   }
                 ]
               }
@@ -442,7 +514,7 @@
               },
               "durability": "persistent",
               "val": {
-                "u32": 2
+                "u32": 3
               }
             }
           },
@@ -471,7 +543,41 @@
               "val": {
                 "vec": [
                   {
-                    "i128": "500"
+                    "i128": "0"
+                  },
+                  {
+                    "i128": "0"
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 518400
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "PoolOutcomeTotals"
+                  },
+                  {
+                    "u32": 2
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "vec": [
+                  {
+                    "i128": "0"
                   },
                   {
                     "i128": "0"
@@ -505,10 +611,10 @@
               "val": {
                 "vec": [
                   {
-                    "string": "A"
+                    "string": "Yes"
                   },
                   {
-                    "string": "B"
+                    "string": "No"
                   }
                 ]
               }
@@ -528,37 +634,10 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "PoolSettlementProtocolFee"
+                    "symbol": "PoolOutcomes"
                   },
                   {
-                    "u32": 1
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "i128": "10"
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 518400
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-              "key": {
-                "vec": [
-                  {
-                    "symbol": "PoolSettlementSource"
-                  },
-                  {
-                    "u32": 1
+                    "u32": 2
                   }
                 ]
               },
@@ -566,7 +645,10 @@
               "val": {
                 "vec": [
                   {
-                    "symbol": "Admin"
+                    "string": "Yes"
+                  },
+                  {
+                    "string": "No"
                   }
                 ]
               }
@@ -590,6 +672,33 @@
                   },
                   {
                     "u32": 1
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "u64": "3600"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 518400
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "PoolTwapPeriod"
+                  },
+                  {
+                    "u32": 2
                   }
                 ]
               },
@@ -637,30 +746,6 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "TotalContractVolume"
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "i128": "500"
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 4095
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-              "key": {
-                "vec": [
-                  {
                     "symbol": "Treasury"
                   }
                 ]
@@ -691,7 +776,7 @@
               },
               "durability": "persistent",
               "val": {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
               }
             }
           },
@@ -745,7 +830,7 @@
                           "symbol": "timestamp"
                         },
                         "val": {
-                          "u64": "100"
+                          "u64": "0"
                         }
                       }
                     ]
@@ -804,7 +889,125 @@
                           "symbol": "timestamp"
                         },
                         "val": {
-                          "u64": "100"
+                          "u64": "0"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 518400
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "TwapSnapshots"
+                  },
+                  {
+                    "u32": 2
+                  },
+                  {
+                    "u32": 0
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "vec": [
+                  {
+                    "map": [
+                      {
+                        "key": {
+                          "symbol": "cumulative_odds_time"
+                        },
+                        "val": {
+                          "i128": "0"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "odds"
+                        },
+                        "val": {
+                          "i128": "5000"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "timestamp"
+                        },
+                        "val": {
+                          "u64": "0"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 518400
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "TwapSnapshots"
+                  },
+                  {
+                    "u32": 2
+                  },
+                  {
+                    "u32": 1
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "vec": [
+                  {
+                    "map": [
+                      {
+                        "key": {
+                          "symbol": "cumulative_odds_time"
+                        },
+                        "val": {
+                          "i128": "0"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "odds"
+                        },
+                        "val": {
+                          "i128": "5000"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "timestamp"
+                        },
+                        "val": {
+                          "u64": "0"
                         }
                       }
                     ]
@@ -861,7 +1064,7 @@
                       "symbol": "last_updated_at"
                     },
                     "val": {
-                      "u64": "100"
+                      "u64": "0"
                     }
                   }
                 ]
@@ -916,7 +1119,7 @@
                       "symbol": "last_updated_at"
                     },
                     "val": {
-                      "u64": "100"
+                      "u64": "0"
                     }
                   }
                 ]
@@ -937,13 +1140,13 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "UserBet"
+                    "symbol": "TwapState"
                   },
                   {
-                    "u32": 1
+                    "u32": 2
                   },
                   {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                    "u32": 0
                   }
                 ]
               },
@@ -952,15 +1155,7 @@
                 "map": [
                   {
                     "key": {
-                      "symbol": "amount_a"
-                    },
-                    "val": {
-                      "i128": "500"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "amount_b"
+                      "symbol": "cumulative_odds_time"
                     },
                     "val": {
                       "i128": "0"
@@ -968,10 +1163,18 @@
                   },
                   {
                     "key": {
-                      "symbol": "total_bet"
+                      "symbol": "last_odds"
                     },
                     "val": {
-                      "i128": "500"
+                      "i128": "5000"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "last_updated_at"
+                    },
+                    "val": {
+                      "u64": "0"
                     }
                   }
                 ]
@@ -992,24 +1195,42 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "UserOutcomeBets"
+                    "symbol": "TwapState"
+                  },
+                  {
+                    "u32": 2
                   },
                   {
                     "u32": 1
-                  },
-                  {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "vec": [
+                "map": [
                   {
-                    "i128": "500"
+                    "key": {
+                      "symbol": "cumulative_odds_time"
+                    },
+                    "val": {
+                      "i128": "0"
+                    }
                   },
                   {
-                    "i128": "0"
+                    "key": {
+                      "symbol": "last_odds"
+                    },
+                    "val": {
+                      "i128": "5000"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "last_updated_at"
+                    },
+                    "val": {
+                      "u64": "0"
+                    }
                   }
                 ]
               }
@@ -1041,170 +1262,6 @@
           "ext": "v0"
         },
         "live_until": 4095
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "2032731177588607455"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 6311999
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "1033654523790656264"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 6311999
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "4837995959683129791"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 6311999
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL",
-              "key": {
-                "vec": [
-                  {
-                    "symbol": "Balance"
-                  },
-                  {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "map": [
-                  {
-                    "key": {
-                      "symbol": "amount"
-                    },
-                    "val": {
-                      "i128": "500"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "authorized"
-                    },
-                    "val": {
-                      "bool": true
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "clawback"
-                    },
-                    "val": {
-                      "bool": false
-                    }
-                  }
-                ]
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 518400
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CBEPDNVYXQGWB5YUBXKJWYJA7OXTZW5LFLNO5JRRGE6Z6C5OSUZPCCEL",
-              "key": {
-                "vec": [
-                  {
-                    "symbol": "Balance"
-                  },
-                  {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "map": [
-                  {
-                    "key": {
-                      "symbol": "amount"
-                    },
-                    "val": {
-                      "i128": "500"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "authorized"
-                    },
-                    "val": {
-                      "bool": true
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "clawback"
-                    },
-                    "val": {
-                      "bool": false
-                    }
-                  }
-                ]
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 518400
       },
       {
         "entry": {

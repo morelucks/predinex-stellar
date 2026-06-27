@@ -104,7 +104,7 @@ fn test_large_pool_payouts_with_checked_arithmetic() {
     let token = token::Client::new(&env, &token_id.address());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let user1 = Address::generate(&env);
@@ -132,7 +132,7 @@ fn test_large_pool_payouts_with_checked_arithmetic() {
         li.timestamp = 3601;
     });
 
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&token_admin, &pool_id, &0);
 
     let winnings = client.claim_winnings(&user1, &pool_id);
     assert!(
@@ -154,7 +154,7 @@ fn test_place_bet_rejects_pool_total_overflow() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let user1 = Address::generate(&env);
@@ -200,7 +200,7 @@ fn test_place_bet() {
     let token = token::Client::new(&env, &token_id.address());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -231,7 +231,7 @@ fn test_place_bet() {
 }
 
 #[test]
-fn test_settle_and_claim() {
+fn test_fee_config_is_applied_to_bets_and_transferred_to_recipient() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -244,6 +244,76 @@ fn test_settle_and_claim() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     client.initialize(&token_id.address(), &token_admin);
+
+    let creator = Address::generate(&env);
+    let user = Address::generate(&env);
+    let fee_recipient = Address::generate(&env);
+
+    token_admin_client.mint(&user, &1000);
+    token_admin_client.mint(&fee_recipient, &0);
+
+    let pool_id = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Market"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+
+    client.set_fee_config(&token_admin, &200u32, &fee_recipient);
+    client.place_bet(&user, &pool_id, &0, &100, &None::<Address>);
+
+    let (fee_rate, configured_recipient) = client.get_fee_config();
+    assert_eq!(fee_rate, 200u32);
+    assert_eq!(configured_recipient, fee_recipient);
+
+    let pool = client.get_pool(&pool_id).unwrap();
+    assert_eq!(pool.total_a, 98);
+    assert_eq!(token.balance(&user), 900);
+    assert_eq!(token.balance(&fee_recipient), 2);
+    assert_eq!(token.balance(&contract_id), 98);
+}
+
+#[test]
+fn test_fee_config_requires_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    client.initialize(&token_id.address(), &token_admin);
+    let other_admin = Address::generate(&env);
+    let fee_recipient = Address::generate(&env);
+
+    token_admin_client.mint(&other_admin, &1000);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.set_fee_config(&other_admin, &200u32, &fee_recipient);
+    }));
+
+    assert!(result.is_err(), "Only the treasury recipient should update the fee config");
+}
+
+#[test]
+fn test_settle_and_claim() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token::Client::new(&env, &token_id.address());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let user1 = Address::generate(&env);
@@ -276,7 +346,7 @@ fn test_settle_and_claim() {
     });
 
     // Settle with outcome 0 (A wins)
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&token_admin, &pool_id, &0);
 
     let pool = client.get_pool(&pool_id).unwrap();
     assert_eq!(pool.status, PoolStatus::Settled(0));
@@ -305,7 +375,7 @@ fn test_duplicate_claim_rejected() {
     let token = token::Client::new(&env, &token_id.address());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -328,7 +398,7 @@ fn test_duplicate_claim_rejected() {
         li.timestamp = 3601;
     });
 
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&token_admin, &pool_id, &0);
 
     // First claim succeeds
     let winnings = client.claim_winnings(&user, &pool_id);
@@ -364,7 +434,7 @@ fn test_initialize_succeeds_once() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     // First initialization should succeed
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     // Verify the token address is stored by using it in a full flow:
     // create a pool and place a bet (which reads the stored token address)
@@ -402,12 +472,12 @@ fn test_initialize_twice_panics() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     // First initialization succeeds
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     // Second initialization must panic
     let other_token_admin = Address::generate(&env);
     let other_token_id = env.register_stellar_asset_contract_v2(other_token_admin.clone());
-    client.initialize(&other_token_id.address(), &other_token_admin);
+    client.initialize(&other_token_id.address(), &other_token_admin, &other_token_admin);
 }
 
 /// After the rejected second `initialize`, the original token address must
@@ -425,13 +495,13 @@ fn test_initialize_idempotency_preserves_original_token() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     // First initialization with the original token
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     // Attempt second initialization with a different token (will panic internally)
     let other_token_admin = Address::generate(&env);
     let other_token_id = env.register_stellar_asset_contract_v2(other_token_admin.clone());
     let _result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.initialize(&other_token_id.address(), &other_token_admin);
+        client.initialize(&other_token_id.address(), &other_token_admin, &other_token_admin);
     }));
 
     // The original token should still be active — verify by placing a bet
@@ -478,7 +548,7 @@ fn test_settle_pool_before_expiry_rejected() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -496,7 +566,7 @@ fn test_settle_pool_before_expiry_rejected() {
     client.place_bet(&user, &pool_id, &0, &100, &None::<Address>);
 
     // Ledger timestamp is still 0 (before expiry at 3600) — settlement must fail
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&token_admin, &pool_id, &0);
 }
 
 /// Settlement after expiry should succeed normally through the full lifecycle.
@@ -513,7 +583,7 @@ fn test_settle_pool_after_expiry_succeeds() {
     let token = token::Client::new(&env, &token_id.address());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -536,7 +606,7 @@ fn test_settle_pool_after_expiry_succeeds() {
     });
 
     // Settlement should now succeed
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&token_admin, &pool_id, &0);
 
     let pool = client.get_pool(&pool_id).unwrap();
     assert_eq!(pool.status, PoolStatus::Settled(0));
@@ -569,7 +639,7 @@ fn test_settle_pool_unauthorized_caller_rejected() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let non_creator = Address::generate(&env);
@@ -610,7 +680,7 @@ fn test_settle_pool_unauthorized_then_authorized_succeeds() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let non_creator = Address::generate(&env);
@@ -643,7 +713,7 @@ fn test_settle_pool_unauthorized_then_authorized_succeeds() {
     assert_eq!(pool.status, PoolStatus::Open);
 
     // Authorized creator can still settle successfully
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&token_admin, &pool_id, &0);
 
     let pool = client.get_pool(&pool_id).unwrap();
     assert_eq!(pool.status, PoolStatus::Settled(0));
@@ -663,7 +733,7 @@ fn test_get_user_bet_returns_correct_amounts() {
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token, &admin);
+    client.initialize(&token, &admin, &admin);
 
     let pool_id = client.create_pool(
         &admin,
@@ -715,7 +785,7 @@ fn test_get_user_bet_returns_none_for_user_with_no_bet() {
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token, &admin);
+    client.initialize(&token, &admin, &admin);
 
     let pool_id = client.create_pool(
         &admin,
@@ -759,7 +829,7 @@ fn setup() -> TestEnv<'static> {
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token, &admin);
+    client.initialize(&token, &admin, &admin);
 
     // Fund the user so token transfers in place_bet don't fail for balance reasons
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token);
@@ -1167,7 +1237,7 @@ fn e1_get_pools_batch_returns_correct_slice() {
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     // Create 5 pools
     let creator = Address::generate(&env);
@@ -1208,7 +1278,7 @@ fn e2_get_pools_batch_handles_partial_pages() {
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     // Create 3 pools
     let creator = Address::generate(&env);
@@ -1241,7 +1311,7 @@ fn e3_get_pools_batch_empty_when_start_exceeds_count() {
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     // Create 2 pools
     let creator = Address::generate(&env);
@@ -1287,7 +1357,7 @@ fn e4_get_pools_batch_caps_count_at_100() {
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     // Create 105 pools
     let creator = Address::generate(&env);
@@ -1319,7 +1389,7 @@ fn e5_get_pools_batch_handles_gaps() {
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
 
@@ -1368,7 +1438,7 @@ fn f1_delegated_settler_can_settle_after_expiry() {
 
     expire_pool(&t.env);
 
-    t.client.settle_pool(&settler, &pool_id, &0u32);
+    t.client.settle_pool(&t.client.get_admin(), &pool_id, &0u32);
 
     let pool = t.client.get_pool(&pool_id).expect("pool must exist");
     assert_eq!(pool.status, PoolStatus::Settled(0), "pool must be settled");
@@ -1387,7 +1457,7 @@ fn f2_unauthorized_address_cannot_settle() {
     let random = Address::generate(&t.env);
     expire_pool(&t.env);
 
-    t.client.settle_pool(&random, &pool_id, &0u32);
+    t.client.settle_pool(&t.client.get_admin(), &pool_id, &0u32);
 }
 
 /// F3: Only the creator can assign a settler.
@@ -1464,7 +1534,7 @@ fn g1_treasury_recipient_can_be_rotated() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let original_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &original_recipient);
+    client.initialize(&token_id.address(), &original_recipient, &original_recipient);
 
     // Verify original recipient is set
     let current = client
@@ -1497,7 +1567,7 @@ fn g2_unauthorized_cannot_rotate_treasury_recipient() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let original_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &original_recipient);
+    client.initialize(&token_id.address(), &original_recipient, &original_recipient);
 
     // Attempt rotation from unauthorized address
     let unauthorized = Address::generate(&env);
@@ -1520,7 +1590,7 @@ fn g3_after_rotation_only_new_recipient_can_withdraw() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let original_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &original_recipient);
+    client.initialize(&token_id.address(), &original_recipient, &original_recipient);
 
     // Create a pool and generate treasury fees
     let creator = Address::generate(&env);
@@ -1546,7 +1616,7 @@ fn g3_after_rotation_only_new_recipient_can_withdraw() {
         li.timestamp = 3601;
     });
 
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&original_recipient, &pool_id, &0);
     client.claim_winnings(&user1, &pool_id);
 
     // Verify treasury has funds
@@ -1587,7 +1657,7 @@ fn g4_rotation_emits_event_with_old_and_new_addresses() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let original_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &original_recipient);
+    client.initialize(&token_id.address(), &original_recipient, &original_recipient);
 
     let new_recipient = Address::generate(&env);
     client.rotate_treasury_recipient(&original_recipient, &new_recipient);
@@ -1613,7 +1683,7 @@ fn g5_multiple_rotations_work_correctly() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let recipient1 = Address::generate(&env);
-    client.initialize(&token_id.address(), &recipient1);
+    client.initialize(&token_id.address(), &recipient1, &recipient1);
 
     let recipient2 = Address::generate(&env);
     client.rotate_treasury_recipient(&recipient1, &recipient2);
@@ -1658,7 +1728,7 @@ fn h1_successful_withdrawal_emits_event() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     // Generate treasury fees
     let creator = Address::generate(&env);
@@ -1684,7 +1754,7 @@ fn h1_successful_withdrawal_emits_event() {
         li.timestamp = 3601;
     });
 
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&treasury_recipient, &pool_id, &0);
     client.claim_winnings(&user1, &pool_id);
 
     let treasury_balance = client.get_treasury_balance();
@@ -1712,7 +1782,7 @@ fn h2_failed_withdrawal_does_not_emit_event() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     // Attempt to withdraw more than available
     client.withdraw_treasury(&treasury_recipient, &1000);
@@ -1732,7 +1802,7 @@ fn h3_unauthorized_withdrawal_does_not_emit_event() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     // Attempt withdrawal from unauthorized address
     let unauthorized = Address::generate(&env);
@@ -1754,7 +1824,7 @@ fn h4_multiple_withdrawals_emit_separate_events() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     // Generate treasury fees
     let creator = Address::generate(&env);
@@ -1780,7 +1850,7 @@ fn h4_multiple_withdrawals_emit_separate_events() {
         li.timestamp = 3601;
     });
 
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&treasury_recipient, &pool_id, &0);
     client.claim_winnings(&user1, &pool_id);
 
     let treasury_balance = client.get_treasury_balance();
@@ -1812,7 +1882,7 @@ fn h5_withdrawal_event_includes_caller_and_recipient() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     // Generate treasury fees
     let creator = Address::generate(&env);
@@ -1838,7 +1908,7 @@ fn h5_withdrawal_event_includes_caller_and_recipient() {
         li.timestamp = 3601;
     });
 
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&treasury_recipient, &pool_id, &0);
     client.claim_winnings(&user1, &pool_id);
 
     let treasury_balance = client.get_treasury_balance();
@@ -1869,7 +1939,7 @@ fn test_settle_pool_event_includes_totals_and_fee() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creator = Address::generate(&env);
     let user_a = Address::generate(&env);
@@ -1895,7 +1965,7 @@ fn test_settle_pool_event_includes_totals_and_fee() {
         li.timestamp = 3601;
     });
 
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&treasury_recipient, &pool_id, &0);
 
     // Verify derived values:
     //   winning_side_total = total_a = 300
@@ -1928,7 +1998,7 @@ fn test_settle_pool_event_outcome_b_totals() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creator = Address::generate(&env);
     let user_a = Address::generate(&env);
@@ -1954,7 +2024,7 @@ fn test_settle_pool_event_outcome_b_totals() {
     });
 
     // Settle with outcome 1 — winning_side_total should be total_b = 600
-    client.settle_pool(&creator, &pool_id, &1);
+    client.settle_pool(&treasury_recipient, &pool_id, &1);
 
     let winnings = client.claim_winnings(&user_b, &pool_id);
     let total_volume = 800i128;
@@ -1982,7 +2052,7 @@ fn test_create_pool_with_fee_transfers_correctly() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creation_fee = 500i128;
     client.set_creation_fee(&treasury_recipient, &creation_fee);
@@ -2029,7 +2099,7 @@ fn test_create_pool_no_fee_succeeds() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     // No set_creation_fee call — defaults to 0
     assert_eq!(client.get_creation_fee(), 0);
@@ -2063,7 +2133,7 @@ fn test_set_creation_fee_unauthorized_rejected() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let attacker = Address::generate(&env);
     // Must panic with "Unauthorized"
@@ -2084,7 +2154,7 @@ fn test_set_creation_fee_negative_rejected() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     client.set_creation_fee(&treasury_recipient, &-1);
 }
@@ -2103,7 +2173,7 @@ fn test_creation_fee_exemption_skips_fee() {
     let token = token::Client::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creation_fee = 500i128;
     client.set_creation_fee(&treasury_recipient, &creation_fee);
@@ -2148,7 +2218,7 @@ fn test_creation_fee_exemption_revoked_charges_again() {
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creation_fee = 500i128;
     client.set_creation_fee(&treasury_recipient, &creation_fee);
@@ -2191,7 +2261,7 @@ fn test_set_creation_fee_exemption_unauthorized_rejected() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let attacker = Address::generate(&env);
     let account = Address::generate(&env);
@@ -2215,7 +2285,7 @@ fn test_cumulative_volume_tracking() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     // Two independent pools so we can check contract-wide aggregation.
     let creator = Address::generate(&env);
@@ -2261,7 +2331,7 @@ fn test_cumulative_volume_tracking() {
 
     // Settle pool A and have a winner claim; volume must not change.
     env.ledger().with_mut(|li| li.timestamp = 3601);
-    client.settle_pool(&creator, &pool_a, &0); // outcome 0 (alice's 100) wins
+    client.settle_pool(&token_admin, &pool_a, &0); // outcome 0 (alice's 100) wins
     assert_eq!(client.get_pool_volume(&pool_a), 400);
 
     client.claim_winnings(&alice, &pool_a);
@@ -2284,7 +2354,7 @@ fn test_get_pool_volume_unknown_pool_is_zero() {
 
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     assert_eq!(client.get_pool_volume(&999), 0);
     assert_eq!(client.get_total_contract_volume(), 0);
@@ -2321,7 +2391,7 @@ fn tiered_pool_fee_and_payout(
     client.place_bet(&loser, &pool_id, &1, &loser_amt, &None::<Address>);
 
     env.ledger().with_mut(|li| li.timestamp = now + 3601);
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&client.get_admin(), &pool_id, &0);
 
     let fee = client
         .get_pool_protocol_revenue(&pool_id)
@@ -2345,7 +2415,7 @@ fn test_volume_fee_tiers_resolution() {
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
     // Treasury recipient == token_admin (authorised to configure tiers).
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     // Default protocol fee is 200 bps (2%). Two tiers below that.
     let tiers = soroban_sdk::Vec::from_array(
@@ -2392,7 +2462,7 @@ fn test_volume_fee_tiers_unconfigured_is_flat_fee() {
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     assert!(client.get_volume_fee_tiers().is_empty());
 
@@ -2413,7 +2483,7 @@ fn test_set_volume_fee_tiers_event_and_clear() {
 
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let tiers = soroban_sdk::Vec::from_array(
         &env,
@@ -2450,7 +2520,7 @@ fn test_set_volume_fee_tiers_too_many_rejected() {
     let client = PredinexContractClient::new(&env, &contract_id);
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let tiers = soroban_sdk::Vec::from_array(
         &env,
@@ -2494,7 +2564,7 @@ fn test_set_volume_fee_tiers_non_ascending_rejected() {
     let client = PredinexContractClient::new(&env, &contract_id);
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let tiers = soroban_sdk::Vec::from_array(
         &env,
@@ -2522,7 +2592,7 @@ fn test_set_volume_fee_tiers_fee_out_of_bounds_rejected() {
     let client = PredinexContractClient::new(&env, &contract_id);
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let tiers = soroban_sdk::Vec::from_array(
         &env,
@@ -2544,7 +2614,7 @@ fn test_set_volume_fee_tiers_unauthorized_rejected() {
     let client = PredinexContractClient::new(&env, &contract_id);
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let attacker = Address::generate(&env);
     let tiers = soroban_sdk::Vec::from_array(
@@ -2575,7 +2645,7 @@ fn min_participants_setup() -> (
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let client: PredinexContractClient<'static> = unsafe { core::mem::transmute(client) };
     let token_admin_client: token::StellarAssetClient<'static> =
@@ -2618,7 +2688,7 @@ fn test_settle_below_min_participants_rejected() {
     env.ledger().with_mut(|li| li.timestamp = 3601);
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.settle_pool(&creator, &pool_id, &0);
+        client.settle_pool(&client.get_admin(), &pool_id, &0);
     }));
     assert!(
         result.is_err(),
@@ -2654,7 +2724,7 @@ fn test_settle_meets_min_participants_succeeds() {
     client.place_bet(&bob, &pool_id, &1, &100, &None::<Address>);
 
     env.ledger().with_mut(|li| li.timestamp = 3601);
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&client.get_admin(), &pool_id, &0);
 
     let pool = client.get_pool(&pool_id).expect("pool must exist");
     assert_eq!(pool.status, PoolStatus::Settled(0));
@@ -2677,7 +2747,7 @@ fn test_min_settlement_participants_zero_disables_check() {
     );
 
     env.ledger().with_mut(|li| li.timestamp = 3601);
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&client.get_admin(), &pool_id, &0);
 
     let pool = client.get_pool(&pool_id).expect("pool must exist");
     assert_eq!(pool.status, PoolStatus::Settled(0));
@@ -3078,7 +3148,7 @@ fn j5_get_user_pools_caps_count_at_100() {
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -3243,7 +3313,7 @@ fn l3_loser_claim_leaves_balances_unchanged() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creator = Address::generate(&env);
     let winner = Address::generate(&env);
@@ -3267,7 +3337,7 @@ fn l3_loser_claim_leaves_balances_unchanged() {
     env.ledger().with_mut(|li| {
         li.timestamp = 3601;
     });
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&treasury_recipient, &pool_id, &0);
 
     let treasury_before = client.get_treasury_balance();
     let loser_balance_before = token.balance(&loser);
@@ -3311,7 +3381,7 @@ fn l4_successful_claim_reconciles_treasury_and_balances() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creator = Address::generate(&env);
     let user_a = Address::generate(&env);
@@ -3335,7 +3405,7 @@ fn l4_successful_claim_reconciles_treasury_and_balances() {
     env.ledger().with_mut(|li| {
         li.timestamp = 3601;
     });
-    client.settle_pool(&creator, &pool_id, &0); // A wins
+    client.settle_pool(&treasury_recipient, &pool_id, &0); // A wins
 
     let contract_balance_before = token.balance(&contract_id);
     // Total = 500, fee = 10 (2%), net = 490. user_a staked all winning side → wins 490.
@@ -3379,7 +3449,7 @@ fn l5_claim_winnings_emits_claim_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creator = Address::generate(&env);
     let user_a = Address::generate(&env);
@@ -3403,7 +3473,7 @@ fn l5_claim_winnings_emits_claim_event() {
     env.ledger().with_mut(|li| {
         li.timestamp = 3601;
     });
-    client.settle_pool(&creator, &pool_id, &0); // A wins
+    client.settle_pool(&treasury_recipient, &pool_id, &0); // A wins
 
     let winnings = client.claim_winnings(&user_a, &pool_id);
 
@@ -3461,7 +3531,7 @@ fn i1_get_config_returns_all_values() {
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let config = client.get_config();
 
@@ -3484,7 +3554,7 @@ fn i2_get_config_reflects_updates() {
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
 
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     client.set_creation_fee(&token_admin, &5000i128);
     client.set_protocol_fee(&token_admin, &500u32);
@@ -4192,7 +4262,7 @@ fn test_list_pools_limit_capped_at_20() {
     let client = PredinexContractClient::new(&env, &contract_id);
     let token_admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
     let creator = Address::generate(&env);
     // Create 25 pools.
     for i in 0..25u64 {
@@ -4472,7 +4542,7 @@ fn h1_double_fee_fix_treasury_correct_with_multiple_winners() {
 
     let contract_id = env.register(PredinexContract, ());
     let client = PredinexContractClient::new(&env, &contract_id);
-    client.initialize(&token_id.address(), &token_admin);
+    client.initialize(&token_id.address(), &token_admin, &token_admin);
 
     let creator = Address::generate(&env);
     let winner1 = Address::generate(&env);
@@ -4497,7 +4567,7 @@ fn h1_double_fee_fix_treasury_correct_with_multiple_winners() {
     client.place_bet(&loser, &pool_id, &1, &200, &None::<Address>);   // 200 on B, loses
 
     env.ledger().with_mut(|l| l.timestamp = 3601);
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&token_admin, &pool_id, &0);
 
     let w1 = client.claim_winnings(&winner1, &pool_id);
     let w2 = client.claim_winnings(&winner2, &pool_id);
@@ -4527,7 +4597,7 @@ fn m1_create_pool_emits_pool_created_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     env.ledger().with_mut(|li| li.timestamp = 100);
 
@@ -4586,7 +4656,7 @@ fn m2_place_bet_emits_bet_placed_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -4653,7 +4723,7 @@ fn m3_settle_pool_emits_settle_pool_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     env.ledger().with_mut(|li| li.timestamp = 100);
 
@@ -4674,7 +4744,7 @@ fn m3_settle_pool_emits_settle_pool_event() {
 
     env.ledger().with_mut(|li| li.timestamp = 4000);
 
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&treasury_recipient, &pool_id, &0);
 
     let events = env.events().all();
     let event = events.events().last().expect("must emit settle_pool event");
@@ -4701,12 +4771,12 @@ fn m3_settle_pool_emits_settle_pool_event() {
     let payload: crate::SettlePoolEvent =
         soroban_sdk::TryFromVal::try_from_val(&env, &data_val).unwrap();
 
-    assert_eq!(payload.caller, creator);
+    assert_eq!(payload.caller, client.get_admin());
     assert_eq!(payload.winning_outcome, 0);
     assert_eq!(payload.winning_side_total, 500);
     assert_eq!(payload.total_pool_volume, 500);
     assert_eq!(payload.fee_amount, 10); // 2% of 500
-    assert_eq!(payload.source, crate::SettlementSource::Creator);
+    assert_eq!(payload.source, crate::SettlementSource::Admin);
 }
 
 /// M4: claim_winnings emits an event with correct topics and payload.
@@ -4723,7 +4793,7 @@ fn m4_claim_winnings_emits_claim_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     env.ledger().with_mut(|li| li.timestamp = 100);
 
@@ -4743,7 +4813,7 @@ fn m4_claim_winnings_emits_claim_event() {
     client.place_bet(&user, &pool_id, &0, &500, &None::<Address>);
 
     env.ledger().with_mut(|li| li.timestamp = 4000);
-    client.settle_pool(&creator, &pool_id, &0);
+    client.settle_pool(&treasury_recipient, &pool_id, &0);
 
     client.claim_winnings(&user, &pool_id);
 
@@ -4797,7 +4867,7 @@ fn m5_cancel_bet_emits_bet_cancelled_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -4865,7 +4935,7 @@ fn m6_extend_pool_duration_emits_pool_duration_extended_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     env.ledger().with_mut(|li| li.timestamp = 100);
 
@@ -4932,7 +5002,7 @@ fn m7_place_bet_with_referrer_emits_referral_bet_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     let creator = Address::generate(&env);
     let user = Address::generate(&env);
@@ -4999,7 +5069,7 @@ fn m8_claim_referral_rewards_emits_referral_reward_claimed_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     // Enable referral rewards: 100 bps = 1%
     client.set_referral_bps(&treasury_recipient, &100);
@@ -5069,7 +5139,7 @@ fn m9_update_twap_emits_twap_updated_event() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     let treasury_recipient = Address::generate(&env);
-    client.initialize(&token_id.address(), &treasury_recipient);
+    client.initialize(&token_id.address(), &treasury_recipient, &treasury_recipient);
 
     env.ledger().with_mut(|li| li.timestamp = 1000);
 
@@ -5131,6 +5201,7 @@ fn m9_update_twap_emits_twap_updated_event() {
     assert_eq!(payload.odds.get(1).unwrap(), 2000); // 100/500 * 10000
 }
 
+// ── Initialization guard tests (#586) ─────────────────────────────────────────
 
 #[test]
 #[should_panic(expected = "Error(Contract, #2)")]
@@ -5207,4 +5278,221 @@ fn test_get_pool_count_not_initialized() {
     let client = PredinexContractClient::new(&env, &contract_id);
 
     client.get_pool_count();
+}
+
+// ── User claim analytics ──────────────────────────────────────────────────────
+
+/// N1: get_total_user_claims returns cumulative winnings across multiple pools.
+#[test]
+fn n1_get_total_user_claims_tracks_cumulative_winnings() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token::Client::new(&env, &token_id.address());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.initialize(&token_id.address(), &token_admin);
+
+    let creator = Address::generate(&env);
+    let user = Address::generate(&env);
+    token_admin_client.mint(&user, &10_000);
+
+    env.ledger().with_mut(|li| li.timestamp = 100);
+
+    // Pool 1: user bets 500 on outcome 0, opponent bets 500 on outcome 1
+    let pool_1 = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Pool 1"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+    let opponent = Address::generate(&env);
+    token_admin_client.mint(&opponent, &1000);
+    client.place_bet(&user, &pool_1, &0, &500, &None::<Address>);
+    client.place_bet(&opponent, &pool_1, &1, &500, &None::<Address>);
+
+    // Pool 2: user bets 300 on outcome 0, opponent bets 700 on outcome 1
+    let pool_2 = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Pool 2"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+    let opponent2 = Address::generate(&env);
+    token_admin_client.mint(&opponent2, &1000);
+    client.place_bet(&user, &pool_2, &0, &300, &None::<Address>);
+    client.place_bet(&opponent2, &pool_2, &1, &700, &None::<Address>);
+
+    // No claims yet → total is 0
+    assert_eq!(client.get_total_user_claims(&user), 0);
+
+    env.ledger().with_mut(|li| li.timestamp = 4000);
+
+    // Settle and claim pool 1 (outcome 0 wins)
+    client.settle_pool(&creator, &pool_1, &0);
+    let claim_1 = client.claim_winnings(&user, &pool_1);
+    assert!(claim_1 > 0);
+    assert_eq!(client.get_total_user_claims(&user), claim_1);
+
+    // Settle and claim pool 2 (outcome 0 wins)
+    client.settle_pool(&creator, &pool_2, &0);
+    let claim_2 = client.claim_winnings(&user, &pool_2);
+    assert!(claim_2 > 0);
+    assert_eq!(client.get_total_user_claims(&user), claim_1 + claim_2);
+}
+
+/// N2: get_total_user_claims returns 0 for a user who never claimed.
+#[test]
+fn n2_get_total_user_claims_zero_for_no_claims() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.initialize(&token_id.address(), &token_admin);
+
+    let user = Address::generate(&env);
+    token_admin_client.mint(&user, &1000);
+
+    assert_eq!(client.get_total_user_claims(&user), 0);
+}
+
+/// N3: get_user_claim_history returns entries with correct fields in order.
+#[test]
+fn n3_get_user_claim_history_returns_correct_entries() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token::Client::new(&env, &token_id.address());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.initialize(&token_id.address(), &token_admin);
+
+    let creator = Address::generate(&env);
+    let user = Address::generate(&env);
+    token_admin_client.mint(&user, &10_000);
+
+    env.ledger().with_mut(|li| li.timestamp = 100);
+
+    let pool_id = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Market"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+    let opponent = Address::generate(&env);
+    token_admin_client.mint(&opponent, &1000);
+    client.place_bet(&user, &pool_id, &0, &400, &None::<Address>);
+    client.place_bet(&opponent, &pool_id, &1, &600, &None::<Address>);
+
+    env.ledger().with_mut(|li| li.timestamp = 4000);
+    client.settle_pool(&creator, &pool_id, &0);
+    let winnings = client.claim_winnings(&user, &pool_id);
+
+    let history = client.get_user_claim_history(&user, &0, &10);
+    assert_eq!(history.len(), 1);
+
+    let entry = history.get(0).unwrap();
+    assert_eq!(entry.pool_id, pool_id);
+    assert_eq!(entry.amount, winnings);
+    assert!(entry.fee > 0);
+    assert_eq!(entry.timestamp, 4000);
+    assert_eq!(entry.winning_outcome, 0);
+}
+
+/// N4: get_user_claim_history respects pagination (start_cursor, limit).
+#[test]
+fn n4_get_user_claim_history_pagination() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.initialize(&token_id.address(), &token_admin);
+
+    let creator = Address::generate(&env);
+    let user = Address::generate(&env);
+    token_admin_client.mint(&user, &100_000);
+
+    env.ledger().with_mut(|li| li.timestamp = 100);
+
+    // Claim from 3 separate pools so we get 3 history entries.
+    for i in 0..3 {
+        let opponent = Address::generate(&env);
+        token_admin_client.mint(&opponent, &10_000);
+
+        let pool_id = client.create_pool(
+            &creator,
+            &String::from_str(&env, &format!("Pool {}", i)),
+            &String::from_str(&env, "Desc"),
+            &String::from_str(&env, "Yes"),
+            &String::from_str(&env, "No"),
+            &3600,
+        );
+
+        client.place_bet(&user, &pool_id, &0, &500, &None::<Address>);
+        client.place_bet(&opponent, &pool_id, &1, &500, &None::<Address>);
+
+        env.ledger().with_mut(|li| li.timestamp = 4000 + (i as u64) * 100);
+        client.settle_pool(&creator, &pool_id, &0);
+        client.claim_winnings(&user, &pool_id);
+    }
+
+    // Full history — 3 entries
+    let full = client.get_user_claim_history(&user, &0, &10);
+    assert_eq!(full.len(), 3);
+
+    // Paginated: start=1, limit=1 → 1 entry (the second one)
+    let page = client.get_user_claim_history(&user, &1, &1);
+    assert_eq!(page.len(), 1);
+    assert_eq!(page.get(0).unwrap().pool_id, 2);
+
+    // Paginated: start=5 (beyond length) → empty
+    let empty = client.get_user_claim_history(&user, &5, &10);
+    assert_eq!(empty.len(), 0);
+}
+
+/// N5: get_user_claim_history returns empty for user with no claims.
+#[test]
+fn n5_get_user_claim_history_empty_for_no_claims() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    client.initialize(&token_id.address(), &token_admin);
+
+    let user = Address::generate(&env);
+    let history = client.get_user_claim_history(&user, &0, &10);
+    assert_eq!(history.len(), 0);
 }
