@@ -10,8 +10,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### ⛓ Contract
-- Fixed pool counter off-by-one: first pool now starts at ID 1 and `get_pool_count` returns the actual count instead of `count + 1` (closes #597)
-- `get_pools_batch` added for efficient batch pool queries, reducing N+1 contract calls to 2 (closes #604)
+- Emit `ClaimWinnings` event on successful claim with topics `(Symbol("claim_winnings"), pool_id, claimant)` and `ClaimEvent` payload containing payout amount, fee amount, winning outcome, and total pool size (#585)
+- Event is gated behind a successful payout — no event emitted when `user_winning_bet == 0` or the call fails
+- Added tests `l5` and `m4` verifying event topics and data match actual payout amounts
+- Add `get_total_user_claims(user)` read method returning cumulative winnings claimed by a user across all pools (covers single-asset, multi-asset, batch, and scheduled claim paths)
+- Add `get_user_claim_history(user, start_cursor, limit)` paginated read method returning up to 50 recent claim entries with pool_id, amount, fee, timestamp, and winning_outcome
+- New `DataKey::UserTotalClaimed(Address)` and `DataKey::UserClaimHistory(Address)` storage entries updated atomically after each successful claim
 
 ### 🌐 Web
 - Updated `getMarkets` and `fetchAllPools` to use the corrected pool count from `get_pool_count`
