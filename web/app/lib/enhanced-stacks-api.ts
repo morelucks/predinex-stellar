@@ -279,7 +279,7 @@ export async function fetchAllPools(page: number = 0, pageSize: number = 50): Pr
   const totalCount = await getPoolCount();
   if (totalCount === 0) return [];
 
-  const startId = Math.max(0, totalCount - 1 - (page * pageSize));
+  const startId = Math.max(0, totalCount - (page * pageSize));
   const endId = Math.max(0, startId - pageSize + 1);
   const actualCount = startId - endId + 1;
 

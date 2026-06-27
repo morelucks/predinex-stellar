@@ -138,7 +138,7 @@ export async function getPool(poolId: number): Promise<Pool | null> {
  */
 export async function getMarkets(filter: 'active' | 'settled' | 'all' = 'all'): Promise<Pool[]> {
     const count = await getPoolCountFromSoroban();
-    if (count <= 1) return [];
+    if (count === 0) return [];
 
     const rawPools = await getPoolsBatchFromSoroban(1, count);
     const pools: Pool[] = [];

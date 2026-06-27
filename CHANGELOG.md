@@ -18,7 +18,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - New `DataKey::UserTotalClaimed(Address)` and `DataKey::UserClaimHistory(Address)` storage entries updated atomically after each successful claim
 
 ### 🌐 Web
-<!-- Changes to the Next.js frontend in web/ -->
+- Updated `getMarkets` and `fetchAllPools` to use the corrected pool count from `get_pool_count`
 
 ### 📖 Docs
 <!-- README, RELEASE, architectural docs, inline documentation -->
@@ -34,6 +34,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Added preview deployment issue template
 - Added setup script for configuring preview deployments (`scripts/setup-preview-deployments.sh`)
 - Added Vercel configuration file (`web/vercel.json`)
+- Fixed `tag-release.yml` to use `PAT_TOKEN` instead of `GITHUB_TOKEN` so tag pushes trigger downstream CI workflows (closes #600)
 
 ---
 
