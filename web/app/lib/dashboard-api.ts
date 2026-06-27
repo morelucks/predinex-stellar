@@ -5,6 +5,7 @@ import { STACKS_MAINNET, STACKS_TESTNET, type StacksNetwork } from "@stacks/netw
 import { UserBet, BetHistory, DashboardData } from "./dashboard-types";
 import { PoolData } from "./market-types";
 import { fetchAllPools, getEnhancedPool } from "./enhanced-stacks-api";
+import { getCurrentBlockHeight } from './market-utils';
 import {
   calculatePortfolio, 
   calculatePotentialWinnings, 
@@ -132,7 +133,7 @@ async function createUserBet(
       marketTitle: pool.title,
       outcomeChosen: outcome,
       outcomeName: outcome === 'A' ? pool.outcomeAName : pool.outcomeBName,
-      amountBet: betAmount,
+      amountBet: Number(betAmount),
       betTimestamp: pool.createdAt, // Mock: use pool creation time
       currentOdds,
       potentialWinnings,

@@ -11,6 +11,8 @@
  */
 import { STACKS_MAINNET, STACKS_TESTNET, StacksNetwork } from "@stacks/network";
 import { fetchCallReadOnlyFunction, cvToValue, uintCV, principalCV, ClarityValue } from "@stacks/transactions";
+import { createScopedLogger } from '@/app/lib/logger';
+const log = createScopedLogger('stacks-api');
 import { getRuntimeConfig } from "./runtime-config";
 import { getPoolCountFromSoroban, getPoolsBatchFromSoroban } from "./soroban-read-api";
 
