@@ -1816,23 +1816,28 @@ impl PredinexContract {
         status: PoolStatus,
         twap_period_secs: u64,
     ) -> Result<u32, ContractError> {
+        // Check length bounds before calling validate_non_empty_string, which
+        // calls copy_into_slice internally. Attempting to copy an oversized
+        // string would panic with a WasmVm error before the contract's own
+        // validation runs, masking the typed ContractError. Length is checked
+        // first so callers always receive TitleTooLong / DescriptionTooLong.
+        if title.len() > MAX_TITLE_LENGTH {
+            return Err(ContractError::TitleTooLong);
+        }
         Self::validate_non_empty_string(
             &title,
             ContractError::TitleEmpty,
             ContractError::StringWhitespaceOnly,
         )?;
-        if title.len() > MAX_TITLE_LENGTH {
-            return Err(ContractError::TitleTooLong);
-        }
 
+        if description.len() > MAX_DESCRIPTION_LENGTH {
+            return Err(ContractError::DescriptionTooLong);
+        }
         Self::validate_non_empty_string(
             &description,
             ContractError::DescriptionEmpty,
             ContractError::StringWhitespaceOnly,
         )?;
-        if description.len() > MAX_DESCRIPTION_LENGTH {
-            return Err(ContractError::DescriptionTooLong);
-        }
 
         Self::validate_outcomes(env, &outcomes)?;
         Self::validate_metadata_uri(&metadata_uri)?;
@@ -4804,22 +4809,22 @@ impl PredinexContract {
     ) -> Result<u32, ContractError> {
         caller.require_auth();
         Self::require_treasury_recipient(&env, &caller)?;
+        if title.len() > MAX_TITLE_LENGTH {
+            return Err(ContractError::TitleTooLong);
+        }
         Self::validate_non_empty_string(
             &title,
             ContractError::TitleEmpty,
             ContractError::StringWhitespaceOnly,
         )?;
-        if title.len() > MAX_TITLE_LENGTH {
-            return Err(ContractError::TitleTooLong);
+        if description.len() > MAX_DESCRIPTION_LENGTH {
+            return Err(ContractError::DescriptionTooLong);
         }
         Self::validate_non_empty_string(
             &description,
             ContractError::DescriptionEmpty,
             ContractError::StringWhitespaceOnly,
         )?;
-        if description.len() > MAX_DESCRIPTION_LENGTH {
-            return Err(ContractError::DescriptionTooLong);
-        }
         Self::validate_outcomes(&env, &outcomes)?;
         Self::validate_metadata_uri(&metadata_uri)?;
         if duration < MIN_POOL_DURATION_SECS {
@@ -4875,22 +4880,22 @@ impl PredinexContract {
         {
             return Err(ContractError::PoolNotFound);
         }
+        if template.title.len() > MAX_TITLE_LENGTH {
+            return Err(ContractError::TitleTooLong);
+        }
         Self::validate_non_empty_string(
             &template.title,
             ContractError::TitleEmpty,
             ContractError::StringWhitespaceOnly,
         )?;
-        if template.title.len() > MAX_TITLE_LENGTH {
-            return Err(ContractError::TitleTooLong);
+        if template.description.len() > MAX_DESCRIPTION_LENGTH {
+            return Err(ContractError::DescriptionTooLong);
         }
         Self::validate_non_empty_string(
             &template.description,
             ContractError::DescriptionEmpty,
             ContractError::StringWhitespaceOnly,
         )?;
-        if template.description.len() > MAX_DESCRIPTION_LENGTH {
-            return Err(ContractError::DescriptionTooLong);
-        }
         Self::validate_outcomes(&env, &template.outcomes)?;
         Self::validate_metadata_uri(&template.metadata_uri)?;
         if template.duration < MIN_POOL_DURATION_SECS {

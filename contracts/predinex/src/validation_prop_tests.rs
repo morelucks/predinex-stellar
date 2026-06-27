@@ -1,5 +1,6 @@
 #![cfg(test)]
 extern crate std;
+use std::format;
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
 
@@ -232,7 +233,7 @@ fn v3_test_outcomes_validation() {
         let count = rng.next_range(MIN_OUTCOME_COUNT as u64, MAX_OUTCOME_COUNT as u64) as u32;
         let mut outcomes = Vec::new(&t.env);
         for i in 0..count {
-            outcomes.push_back(String::from_str(&t.env, &std::format!("Outcome {}", i)));
+            outcomes.push_back(String::from_str(&t.env, &format!("Outcome {}", i)));
         }
 
         let result = t.client.try_create_multi_outcome_pool(
@@ -262,7 +263,7 @@ fn v3_test_outcomes_validation() {
     // 3. Too many outcomes
     let mut many_outcomes = Vec::new(&t.env);
     for i in 0..(MAX_OUTCOME_COUNT + 1) {
-        many_outcomes.push_back(String::from_str(&t.env, &std::format!("Outcome {}", i)));
+        many_outcomes.push_back(String::from_str(&t.env, &format!("Outcome {}", i)));
     }
     let result = t.client.try_create_multi_outcome_pool(
         &t.admin,

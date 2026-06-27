@@ -3613,14 +3613,17 @@ fn i2_get_config_reflects_updates() {
 // Issue #154: Metadata length limit tests
 // ============================================================================
 
+/// A title of 101 bytes (one over the 100-byte limit) must return
+/// ContractError::TitleTooLong. The length check now runs before
+/// copy_into_slice so a clean typed error is returned instead of a
+/// WasmVm panic.
 #[test]
-#[should_panic]
 fn test_create_pool_exceeds_title_length() {
     let t = setup();
     let long_title_str = std::string::String::from_utf8(std::vec![b'A'; 101]).unwrap();
     let long_title = String::from_str(&t.env, &long_title_str);
 
-    t.client.create_pool(
+    let result = t.client.try_create_pool(
         &t.admin,
         &long_title,
         &String::from_str(&t.env, "Description"),
@@ -3629,16 +3632,24 @@ fn test_create_pool_exceeds_title_length() {
         &3_600u64,
         &MIN_CREATOR_DEPOSIT,
     );
+    assert_eq!(
+        result,
+        Err(Ok(ContractError::TitleTooLong)),
+        "title of 101 bytes must return ContractError::TitleTooLong"
+    );
 }
 
+/// A description of 1001 bytes (one over the 1000-byte limit) must return
+/// ContractError::DescriptionTooLong. The length check now runs before
+/// copy_into_slice so a clean typed error is returned instead of a
+/// WasmVm panic.
 #[test]
-#[should_panic]
 fn test_create_pool_exceeds_description_length() {
     let t = setup();
     let long_desc_str = std::string::String::from_utf8(std::vec![b'B'; 1001]).unwrap();
     let long_desc = String::from_str(&t.env, &long_desc_str);
 
-    t.client.create_pool(
+    let result = t.client.try_create_pool(
         &t.admin,
         &String::from_str(&t.env, "Title"),
         &long_desc,
@@ -3646,6 +3657,11 @@ fn test_create_pool_exceeds_description_length() {
         &String::from_str(&t.env, "No"),
         &3_600u64,
         &MIN_CREATOR_DEPOSIT,
+    );
+    assert_eq!(
+        result,
+        Err(Ok(ContractError::DescriptionTooLong)),
+        "description of 1001 bytes must return ContractError::DescriptionTooLong"
     );
 }
 
@@ -4317,7 +4333,7 @@ fn test_list_pools_limit_capped_at_20() {
     for i in 0..25u64 {
         client.create_pool(
             &creator,
-            &String::from_str(&env, &std::format!("Pool {}", i)),
+            &String::from_str(&env, &format!("Pool {}", i)),
             &String::from_str(&env, "Desc"),
             &String::from_str(&env, "Yes"),
             &String::from_str(&env, "No"),
