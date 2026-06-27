@@ -67,6 +67,7 @@ const LP_PRECISION: i128 = 1_000_000_000;
 #[derive(Clone)]
 #[contracttype]
 pub enum DataKey {
+    Admin,
     Pool(u32),
     UserBet(u32, Address),
     PoolOutcomes(u32),
@@ -350,6 +351,8 @@ pub enum ContractError {
 #[derive(Clone, PartialEq, Debug)]
 #[contracttype]
 pub enum SettlementSource {
+    /// Admin called `settle_pool` directly.
+    Admin,
     /// Pool creator called `settle_pool` directly.
     Creator,
     /// A delegated operator (assigned via `assign_settler`) called `settle_pool`.
@@ -884,6 +887,7 @@ impl PredinexContract {
         env: Env,
         token: Address,
         treasury_recipient: Address,
+        admin: Address,
     ) -> Result<(), ContractError> {
         if env.storage().persistent().has(&DataKey::Token) {
             return Err(ContractError::AlreadyInitialized);
@@ -893,11 +897,28 @@ impl PredinexContract {
             .persistent()
             .set(&DataKey::TreasuryRecipient, &treasury_recipient);
         env.storage().persistent().set(&DataKey::Treasury, &0i128);
+        env.storage().persistent().set(&DataKey::Admin, &admin);
+        env.events().publish((Symbol::new(&env, "AdminSet"), event_version(&env)), admin);
         // #191 — persist the contract state schema version on initialization.
         env.storage().persistent().set(
             &DataKey::ContractVersion,
             &Symbol::new(&env, CONTRACT_STATE_VERSION),
         );
+        Ok(())
+    }
+
+    pub fn get_admin(env: Env) -> Address {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| env.storage().persistent().get(&DataKey::TreasuryRecipient).unwrap())
+    }
+
+    fn require_admin(env: &Env, caller: &Address) -> Result<(), ContractError> {
+        let admin = Self::get_admin(env.clone());
+        if caller != &admin {
+            return Err(ContractError::Unauthorized);
+        }
         Ok(())
     }
 
@@ -2256,11 +2277,11 @@ impl PredinexContract {
             .unwrap_or(DEFAULT_MAX_BET_STROOPS);
 
         if min_bet > 0 && amount < min_bet {
-            return Err(ContractError::InvalidBetAmount);
+            return Err(ContractError::BetBelowMinBet);
         }
         // max_bet == 0 => no maximum.
         if max_bet > 0 && amount > max_bet {
-            return Err(ContractError::InvalidBetAmount);
+            return Err(ContractError::BetAboveMaxBet);
         }
 
         let mut totals = Self::read_outcome_totals(&env, pool_id, &pool);
@@ -3101,6 +3122,7 @@ impl PredinexContract {
         winning_outcome: u32,
     ) -> Result<(), ContractError> {
         Self::require_not_paused(env)?;
+        Self::require_admin(env, caller)?;
 
         let mut pool = env
             .storage()
@@ -3108,24 +3130,7 @@ impl PredinexContract {
             .get::<_, Pool>(&DataKey::Pool(pool_id))
             .ok_or(ContractError::PoolNotFound)?;
 
-        let delegated_settler: Option<Address> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::DelegatedSettler(pool_id));
-
-        // #176 — determine the settlement source before the auth check so we
-        // can record it on-chain and in the event without a second read.
-        let source = if caller == &pool.creator {
-            SettlementSource::Creator
-        } else if delegated_settler
-            .as_ref()
-            .map(|s| s == caller)
-            .unwrap_or(false)
-        {
-            SettlementSource::Operator
-        } else {
-            return Err(ContractError::Unauthorized);
-        };
+        let source = SettlementSource::Admin;
 
         if pool.status != PoolStatus::Open {
             return Err(ContractError::PoolAlreadySettled);
@@ -3465,7 +3470,9 @@ impl PredinexContract {
     /// # Payout rounding policy (#158)
     /// Per-claim payout is computed via integer floor division:
     ///
-    ///     winnings = floor(user_winning_bet * net_pool_balance / pool_winning_total)
+    /// ```text
+    /// winnings = floor(user_winning_bet * net_pool_balance / pool_winning_total)
+    /// ```
     ///
     /// where `net_pool_balance = total_pool_balance - fee` and
     /// `fee = floor(total_pool_balance * 2 / 100)`. Because every claim rounds
@@ -3476,9 +3483,11 @@ impl PredinexContract {
     /// winner). The 2 % protocol fee is credited to the treasury only on the
     /// **first** claim. After every winner has claimed:
     ///
-    ///     total_pool_balance == fee + payout_dust + sum(payouts)
-    ///     contract_balance_attributable_to_pool == fee + payout_dust
-    ///                                           == treasury_credit_for_pool
+    /// ```text
+    /// total_pool_balance == fee + payout_dust + sum(payouts)
+    /// contract_balance_attributable_to_pool == fee + payout_dust
+    ///                                       == treasury_credit_for_pool
+    /// ```
     ///
     /// See `web/docs/PAYOUT_ROUNDING.md` for indexer / UI guidance.
     pub fn claim_winnings(env: Env, user: Address, pool_id: u32) -> Result<i128, ContractError> {
