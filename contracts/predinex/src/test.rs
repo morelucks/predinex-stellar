@@ -229,6 +229,76 @@ fn test_place_bet() {
 }
 
 #[test]
+fn test_fee_config_is_applied_to_bets_and_transferred_to_recipient() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token::Client::new(&env, &token_id.address());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    client.initialize(&token_id.address(), &token_admin);
+
+    let creator = Address::generate(&env);
+    let user = Address::generate(&env);
+    let fee_recipient = Address::generate(&env);
+
+    token_admin_client.mint(&user, &1000);
+    token_admin_client.mint(&fee_recipient, &0);
+
+    let pool_id = client.create_pool(
+        &creator,
+        &String::from_str(&env, "Market"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Yes"),
+        &String::from_str(&env, "No"),
+        &3600,
+    );
+
+    client.set_fee_config(&token_admin, &200u32, &fee_recipient);
+    client.place_bet(&user, &pool_id, &0, &100, &None::<Address>);
+
+    let (fee_rate, configured_recipient) = client.get_fee_config();
+    assert_eq!(fee_rate, 200u32);
+    assert_eq!(configured_recipient, fee_recipient);
+
+    let pool = client.get_pool(&pool_id).unwrap();
+    assert_eq!(pool.total_a, 98);
+    assert_eq!(token.balance(&user), 900);
+    assert_eq!(token.balance(&fee_recipient), 2);
+    assert_eq!(token.balance(&contract_id), 98);
+}
+
+#[test]
+fn test_fee_config_requires_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(PredinexContract, ());
+    let client = PredinexContractClient::new(&env, &contract_id);
+
+    let token_admin = Address::generate(&env);
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_admin_client = token::StellarAssetClient::new(&env, &token_id.address());
+
+    client.initialize(&token_id.address(), &token_admin);
+    let other_admin = Address::generate(&env);
+    let fee_recipient = Address::generate(&env);
+
+    token_admin_client.mint(&other_admin, &1000);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.set_fee_config(&other_admin, &200u32, &fee_recipient);
+    }));
+
+    assert!(result.is_err(), "Only the treasury recipient should update the fee config");
+}
+
+#[test]
 fn test_settle_and_claim() {
     let env = Env::default();
     env.mock_all_auths();

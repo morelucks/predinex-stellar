@@ -79,6 +79,8 @@ pub enum DataKey {
     Token,
     Treasury,
     TreasuryRecipient,
+    FeeRate,
+    FeeRecipient,
     DelegatedSettler(u32),
     FreezeAdmin,
     /// Per-pool minimum bet amount (in raw token units / i128).
@@ -915,6 +917,8 @@ impl PredinexContract {
         env.storage()
             .persistent()
             .set(&DataKey::TreasuryRecipient, &treasury_recipient);
+        env.storage().persistent().set(&DataKey::FeeRecipient, &treasury_recipient);
+        env.storage().persistent().set(&DataKey::FeeRate, &0u32);
         env.storage().persistent().set(&DataKey::Treasury, &0i128);
         // #191 — persist the contract state schema version on initialization.
         env.storage().persistent().set(
@@ -922,6 +926,50 @@ impl PredinexContract {
             &Symbol::new(&env, CONTRACT_STATE_VERSION),
         );
         Ok(())
+    }
+
+    /// Configure the contract-wide bet fee in basis points.
+    ///
+    /// Only the treasury recipient may call this. The configured fee is deducted
+    /// from each `place_bet` amount before it is added to the pool; the fee
+    /// amount is transferred to the configured recipient.
+    pub fn set_fee_config(
+        env: Env,
+        caller: Address,
+        fee_rate: u32,
+        fee_recipient: Address,
+    ) -> Result<(), ContractError> {
+        caller.require_auth();
+        Self::require_treasury_recipient(&env, &caller)?;
+        if fee_rate > 10_000 {
+            return Err(ContractError::FeeOutOfBounds);
+        }
+
+        env.storage().persistent().set(&DataKey::FeeRate, &fee_rate);
+        env.storage()
+            .persistent()
+            .set(&DataKey::FeeRecipient, &fee_recipient);
+        env.events().publish(
+            (Symbol::new(&env, "FeeConfigUpdated"), event_version(&env)),
+            (fee_rate, fee_recipient.clone()),
+        );
+        Ok(())
+    }
+
+    /// Return the contract-wide bet fee configuration.
+    pub fn get_fee_config(env: Env) -> (u32, Address) {
+        let fee_rate = env
+            .storage()
+            .persistent()
+            .get::<_, u32>(&DataKey::FeeRate)
+            .unwrap_or(0);
+        let fee_recipient = env
+            .storage()
+            .persistent()
+            .get::<_, Address>(&DataKey::FeeRecipient)
+            .or_else(|| env.storage().persistent().get::<_, Address>(&DataKey::TreasuryRecipient))
+            .unwrap_or_else(|| env.current_contract_address());
+        (fee_rate, fee_recipient)
     }
 
     /// #179 — Set the per-pool creation fee (in stroops). Only the treasury
@@ -2308,25 +2356,41 @@ impl PredinexContract {
             .ok_or(ContractError::NotInitialized)?;
         let token_client = token::Client::new(&env, &token_address);
 
+        let (fee_rate, fee_recipient) = Self::get_fee_config(env.clone());
+        let fee_amount = if fee_rate > 0 {
+            amount
+                .checked_mul(fee_rate as i128)
+                .ok_or(ContractError::PoolTotalOverflow)?
+                / 10_000
+        } else {
+            0
+        };
+        let net_amount = amount
+            .checked_sub(fee_amount)
+            .ok_or(ContractError::InvalidBetAmount)?;
+
         token_client.transfer(&user, &env.current_contract_address(), &amount);
+        if fee_amount > 0 {
+            token_client.transfer(&env.current_contract_address(), &fee_recipient, &fee_amount);
+        }
 
         let current_outcome_total = totals.get(outcome).unwrap();
         totals.set(
             outcome,
             current_outcome_total
-                .checked_add(amount)
+                .checked_add(net_amount)
                 .ok_or(ContractError::PoolTotalOverflow)?,
         );
 
         if outcome == 0 {
             pool.total_a = pool
                 .total_a
-                .checked_add(amount)
+                .checked_add(net_amount)
                 .ok_or(ContractError::PoolTotalOverflow)?;
         } else {
             pool.total_b = pool
                 .total_b
-                .checked_add(amount)
+                .checked_add(net_amount)
                 .ok_or(ContractError::PoolTotalOverflow)?;
         }
 
@@ -2335,14 +2399,14 @@ impl PredinexContract {
         // diverges from total_a/total_b once winners withdraw.
         pool.cumulative_volume = pool
             .cumulative_volume
-            .checked_add(amount)
+            .checked_add(net_amount)
             .ok_or(ContractError::PoolTotalOverflow)?;
         let total_contract_volume: i128 = env
             .storage()
             .persistent()
             .get::<_, i128>(&DataKey::TotalContractVolume)
             .unwrap_or(0)
-            .checked_add(amount)
+            .checked_add(net_amount)
             .ok_or(ContractError::PoolTotalOverflow)?;
         env.storage()
             .persistent()
@@ -2384,17 +2448,17 @@ impl PredinexContract {
         if outcome == 0 {
             user_bet.amount_a = user_bet
                 .amount_a
-                .checked_add(amount)
+                .checked_add(net_amount)
                 .ok_or(ContractError::UserBetOverflow)?;
         } else {
             user_bet.amount_b = user_bet
                 .amount_b
-                .checked_add(amount)
+                .checked_add(net_amount)
                 .ok_or(ContractError::UserBetOverflow)?;
         }
         user_bet.total_bet = user_bet
             .total_bet
-            .checked_add(amount)
+            .checked_add(net_amount)
             .ok_or(ContractError::UserBetOverflow)?;
 
         env.storage()
@@ -2412,7 +2476,7 @@ impl PredinexContract {
         outcome_bets.set(
             outcome,
             current_user_outcome
-                .checked_add(amount)
+                .checked_add(net_amount)
                 .ok_or(ContractError::UserBetOverflow)?,
         );
         env.storage().persistent().set(
@@ -2444,7 +2508,7 @@ impl PredinexContract {
             ),
             BetEvent {
                 outcome,
-                amount,
+                amount: net_amount,
                 total_yes,
                 total_no,
             },
